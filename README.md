@@ -2,8 +2,9 @@
 
 Convert handwritten food records into evidence-linked structured drafts for research review.
 
-**离线审核（0.4.0）已实现。** 负责人按可配置天数发包，合作者本地续审并回传结果，无需共享服务器或 API key。见[中文使用指南](docs/offline_review_guide.md)。审核工具启动包：`dist/offline-reviewer-0.4.0.zip`；首次安装需 Python 3.11+ 和联网安装依赖，后续审核离线。
+**Offline review is available (0.4.3).** Study owners export packages with a configurable number of days. Collaborators review locally, resume saved work, and return result files without a shared server or API key. The reviewer launcher bundle is `dist/offline-reviewer-0.4.3.zip` when built locally. Initial setup requires Python 3.11+ and an internet connection to install dependencies; subsequent review sessions work offline.
 
+Detailed documentation under `docs/` is maintained locally and is not included in this repository. References to those files below apply to the local project checkout.
 **Current milestone: P0–P2.** The package includes incremental ingestion and AI drafts,
 plus the authenticated review workbench: source comparison, editing,
 participant/date assignments, independent review, clarification help, adjudication,
