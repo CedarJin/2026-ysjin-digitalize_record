@@ -1,0 +1,16 @@
+{
+  "name": "food-record-desktop",
+  "version": "0.5.0",
+  "private": true,
+  "description": "Food record research workspace for Apple Silicon",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "package": "node package.cjs"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "44.9.2",
+    "playwright": "1.64.1"
+  }
+}

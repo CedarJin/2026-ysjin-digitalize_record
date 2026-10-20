@@ -196,6 +196,8 @@ class OpenAIProvider:
         image_max_edge: int = 1200,
         jpeg_quality: int = 70,
         max_output_ceiling: int = 64000,
+        api_key: str | None = None,
+        base_url: str | None = None,
     ):
         if (
             not 0 <= image_max_edge <= 4096
@@ -208,10 +210,10 @@ class OpenAIProvider:
         self.attempt_callback = None
         self.image_max_edge, self.jpeg_quality = image_max_edge, jpeg_quality
         self.model, self.max_output_tokens = model, max_output_tokens
-        self.base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+        self.base_url = (base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
         if not self.base_url.startswith("https://"):
             raise ProviderError("https_endpoint_required")
-        self.key = os.environ.get("OPENAI_API_KEY")
+        self.key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.key:
             raise ProviderError("missing_api_key")
         self.client = client or httpx.Client(timeout=timeout, follow_redirects=False)

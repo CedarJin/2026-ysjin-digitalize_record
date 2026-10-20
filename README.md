@@ -1,6 +1,6 @@
 # Food Record Digitizer
 
-Turn handwritten food-record PDFs into structured, evidence-linked data, with human review before research use. Version **0.4.4** supports single-record and batch imports, concurrent AI extraction, and offline review packages for collaborators.
+Turn handwritten food-record PDFs into structured, evidence-linked data, with human review before research use. Version **0.5.0** supports single-record and batch imports, concurrent AI extraction, and offline review packages for collaborators.
 
 The intended workflow is:
 
@@ -9,6 +9,104 @@ The intended workflow is:
 The study owner keeps the main workspace on their computer. Collaborators receive ZIP packages, review on their own computers, and return result ZIPs. No shared server is required, and the owner's computer does not need to stay on while collaborators review.
 
 This package transcribes food records. It does not automatically code foods against a nutrient database, estimate nutrient intake, or convert household portions into grams. AI drafts require human checking; a structurally valid result is not proof of transcription accuracy.
+
+## One research engine, two ways to use it
+
+The **Python package** is the research engine. The **desktop app** is a graphical interface that bundles and calls that same engine. They do not maintain separate extraction algorithms or separate review rules.
+
+| | Python package | macOS desktop app |
+| --- | --- | --- |
+| Intended user | Researchers/developers comfortable with Python and Terminal | Nutritionists, study owners and reviewers who prefer a graphical interface |
+| Entry point | `food-record` commands and the package's local review interface | Double-click **Food Record.app** |
+| Installation | Python dependencies; Poppler for the default CLI renderer | Bundled Python and PDF renderer; no Terminal or developer tools required |
+| Responsibilities | Import, source versioning, image preparation, AI extraction, evidence validation, review, offline exchange and releases | Study selection, native file dialogs, protected credential storage, processing queue and graphical access to the engine |
+| Study storage | A local workspace with source files, metadata, drafts and review history | The same workspace format; local SQLite studies can be opened directly |
+| Collaboration | Export reviewer packages and import result packages | Open reviewer ZIPs in the same app without an account or API key |
+
+Choose the **desktop app** for everyday graphical use. Choose the **package** for scripted imports, batch automation or integration into another research workflow. Installing the package alone does not install the Mac app. Downloading the GitHub source ZIP is also not the same as downloading a built app.
+
+### How data moves through the system
+
+```text
+PDF scans + metadata
+        |
+        v
+Study workspace -- explicit AI processing --> Evidence-linked draft
+        |                                           |
+        |                               Human review and corrections
+        |                                           |
+        +-- reviewer ZIP --> offline reviewer ------+
+                              |                     |
+                              +-- returned ZIP --> Owner approval
+                                                    |
+                                             Frozen research release
+                                             (JSON / CSV / XLSX)
+```
+
+A **record** consists of a main PDF and its clarification attachments. A **review unit** groups records for the same participant and known intake date; undated sources remain separate. A **study** owns the source versions, drafts, review history and releases. A **review package** contains only assigned review units and supporting sources; it is not a replacement for the owner's full study.
+
+Import and review do not call AI. Only explicitly confirmed processing sends scans to the configured OpenAI API and incurs API charges; ChatGPT/Codex subscriptions do not cover these calls. Current-version drafts are reused. New or changed sources are versioned, affected reviews need checking again, and previously frozen releases remain unchanged.
+
+### Desktop architecture
+
+- `desktop/`: Electron main process and restricted preload bridge. Handles native dialogs, window lifecycle, Keychain-protected credentials and the bundled backend.
+- `src/food_record_digitizer/`: shared Python engine plus desktop service, persistent queue, import preview and spreadsheet export adapters.
+- `src/food_record_digitizer/static/`: graphical study management and shared owner/reviewer interfaces.
+- `scripts/desktop/`: arm64 build and synthetic acceptance tools.
+
+The app starts a private service bound only to the local computer, with a fresh launch credential and origin checks. The renderer is sandboxed and has no general shell or filesystem access. No shared server or cloud database is required. The app and a study are separate folders: replacing the app does not replace research data. Keep only one writer open for a study.
+
+## macOS desktop app — Apple Silicon preview
+
+The desktop app wraps this same Python package. It includes Python and a PDF renderer; end users do **not** need Terminal, Homebrew, Node.js, or a Python installation. This build targets Apple Silicon (including M1) and macOS 13 or newer. It is an internal, unsigned preview, not a signed/notarized public release. Intel Macs are not supported by this build.
+
+### Install the app
+
+Obtain the built `Food-Record-0.5.0-macOS-arm64.zip` from the study owner or maintainer. Built installers are not included in this source repository; do not assume a public release download is available.
+
+1. Unzip the **installer ZIP**.
+2. Drag **Food Record.app** into **Applications** and open it.
+3. This internal build is unsigned and unnotarized. If macOS reports an unidentified developer, use **System Settings → Privacy & Security → Open Anyway** only after confirming the installer came from your trusted study owner. See [Apple's opening-app guidance](https://support.apple.com/en-us/102445). Report other launch errors rather than disabling system-wide protection.
+
+### Start with your own data
+
+**A new researcher does not need an existing workspace, database or specially arranged input folder.** Enter a study name and click **Create study**, then choose a new folder such as `Documents/My Nutrition Study`. The app creates `workspace.json`, `records.db` and its managed source storage automatically. Use **Add records** to import your existing PDFs and metadata from wherever they are currently stored.
+
+| What you have | Use this entry point |
+| --- | --- |
+| Your own PDFs and metadata, but no study yet | **Create study**, then **Add records** |
+| A study previously created by this app or the package | **Open study**; select the whole folder containing `workspace.json` |
+| An assigned reviewer ZIP from a colleague | **Open review package**; do not unzip the review ZIP |
+| A full study backup ZIP | **Restore backup** into a new folder |
+
+You do not need the original developer's workspace or research data. A raw PDF folder is not an existing study. Reviewers receive the app installer and their assigned review ZIP, not the owner's database or API key.
+
+### Owner and reviewer workflow
+
+1. Open **Food Record.app**. Choose **Create study**, enter a name and choose a new folder. For an existing package workspace, use **Open study** and select the folder containing `workspace.json`. The app backs up an older workspace before adding desktop state. Keep one writable instance per study; do not open the same study simultaneously in the CLI/web server or a cloud-synced shared folder.
+2. Choose **Add records**. Select one or many PDFs and optional CSV/XLSX/JSON metadata. Download the CSV template if needed. In the association list, assign a main file an ID such as `R0001` and its clarifications `R0001-A1`, `R0001-A2`, etc. Edit participant/date metadata, check the import report, then import. Original filenames are unchanged. Unknown dates may remain blank. Metadata without a PDF does not become a review task. Importing does not call AI.
+3. Select records and choose **Process selected**. The confirmation shows how many current drafts will be reused and how many records/pages require paid requests. **Existing candidates for the current input version are reused even if the default model changed.** Opening or reopening a study never starts processing. For new extraction, configure the API key and model in **Settings**. The saved key is encrypted with macOS Keychain protection outside the study. No key is needed to review existing drafts.
+4. **Pause queue** stops new dispatches; already sent requests finish and are saved. After interruption, queued work stays paused. Unknown remote outcomes require explicit retry confirmation because they may already have incurred charges. **Select failed** excludes unknown-outcome requests. Timings appear per record. **Edit manually** creates a baseline without an AI request when readable sources and participant metadata are present.
+5. Open **Review & collaboration**. Review complete participant/date groups, compare scans with food items, and edit time and label independently. Start your review, check every page, then submit. Approve only after required reviews are complete. **Edit review** reopens your submitted review; current approval is withdrawn and prior frozen releases remain unchanged.
+6. Use **Export** for selected or all draft baselines, or preview approved days and create a frozen release. Archives contain XLSX, CSV and full JSON. The workbook separates food items, events, days, sources, issues and evidence. Blank values retain missing reasons; one-to-many evidence does not duplicate food rows. Original draft exports do not incorporate later human edits; approved releases contain the approved review results.
+7. For collaborators, register an offline reviewer under **People & policy**, select days, and choose **Export review packages**. Set **days per package**; whole review units stay together. Downloaded task packages include the reviewer name. The collaborator opens the ZIP through **Open review package** in the same Mac app, works offline without a key or account, submits each day, and exports the result ZIP. They can reopen and revise submitted reviews. Import returns in **Offline packages**; duplicate/stale/conflicting returns follow the package's existing review rules and do not automatically approve data.
+8. Use **Export → Save backup** to save a verified study backup. **Restore backup** on the start screen restores into a new folder. Recent studies appear on the start screen. Closing while processing offers **Keep processing** or **Stop after current requests**; forced termination never silently restarts requests.
+
+The owner computer can be off while collaborators review. Review and exports work offline; new AI extraction requires an internet connection and API billing. The application has no nutrient-database coding or automatic nutrient calculation.
+
+**Validation boundary:** packaged arm64 startup, bundled PDF rendering, isolated owner/reviewer workflows and automated regression tests have been exercised on the development Mac. A separate clean Mac/account, two physical Macs, minimum-version hardware, Keychain behavior across signed updates and a nutritionist usability session remain release acceptance checks. Do not treat this preview as D5 distribution certification.
+
+### Building the desktop app (developers only)
+
+Build on an Apple Silicon Mac with Python 3.11+ and Node.js 22.12+:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e ".[desktop,dev]"
+./scripts/desktop/build.sh
+```
+
+The output is `dist/macos/Food Record-darwin-arm64/Food Record.app`. JavaScript dependencies are pinned in `desktop/package-lock.json`; Python build/PDF dependencies are pinned in the `desktop` extra. The build does not include local studies, `.env`, or `docs`. To run the synthetic checks, use `scripts/desktop/smoke_backend.py`, `scripts/desktop/prepare_qa.py`, `desktop/smoke.cjs`, `desktop/workflow-test.cjs` and `scripts/desktop/verify_return.py`; these never call AI. The remaining numbered sections are **Python package / CLI instructions**. Desktop users do not need to run those installation commands.
 
 ## 1. Install on the study owner's computer
 

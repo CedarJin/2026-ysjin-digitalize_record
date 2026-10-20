@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 
 from PIL import Image
@@ -15,6 +16,22 @@ from PIL import Image
 from .ingest import InputError
 
 RENDER_VERSION = "2"
+_PDFIUM_LOCK = threading.Lock()  # PDFium's library is not thread safe.
+
+
+def render_pdfium(source, page, dpi, generated):
+    import pypdfium2 as pdfium
+
+    with _PDFIUM_LOCK, pdfium.PdfDocument(source) as document:
+        pdf_page = document[page - 1]
+        try:
+            bitmap = pdf_page.render(scale=dpi / 72)
+            try:
+                bitmap.to_pil().save(generated)
+            finally:
+                bitmap.close()
+        finally:
+            pdf_page.close()
 
 
 def _image_valid(path: Path) -> bool:
@@ -52,7 +69,8 @@ def _cached(output: Path, receipt: Path, source_hash: str, page: int, dpi: int) 
 
 def render_pages(store, snapshot: dict, cache: Path, dpi: int = 150) -> list[dict]:
     binary = shutil.which("pdftoppm")
-    if not binary:
+    use_pdfium = os.environ.get("FOOD_RECORD_RENDERER") == "pdfium"
+    if not binary and not use_pdfium:
         raise InputError("Poppler is required: install pdftoppm before extraction")
     if isinstance(dpi, bool) or not isinstance(dpi, int) or not 72 <= dpi <= 300:
         raise InputError("Rendering DPI must be an integer from 72 to 300")
@@ -72,24 +90,27 @@ def render_pages(store, snapshot: dict, cache: Path, dpi: int = 150) -> list[dic
                     prefix = Path(temp) / "page"
                     generated = prefix.with_suffix(".png")
                     try:
-                        subprocess.run(
-                            [
-                                binary,
-                                "-f",
-                                str(page),
-                                "-l",
-                                str(page),
-                                "-singlefile",
-                                "-r",
-                                str(dpi),
-                                "-png",
-                                str(source),
-                                str(prefix),
-                            ],
-                            check=True,
-                            timeout=90,
-                            capture_output=True,
-                        )
+                        if use_pdfium:
+                            render_pdfium(source, page, dpi, generated)
+                        else:
+                            subprocess.run(
+                                [
+                                    binary,
+                                    "-f",
+                                    str(page),
+                                    "-l",
+                                    str(page),
+                                    "-singlefile",
+                                    "-r",
+                                    str(dpi),
+                                    "-png",
+                                    str(source),
+                                    str(prefix),
+                                ],
+                                check=True,
+                                timeout=90,
+                                capture_output=True,
+                            )
                         if not _image_valid(generated):
                             raise InputError("PDF renderer did not produce a complete PNG")
                         metadata = {

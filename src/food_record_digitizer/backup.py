@@ -29,6 +29,15 @@ def create_backup(workspace, output):
         with sqlite3.connect(workspace.path / "records.db") as source, sqlite3.connect(snapshot) as dest:
             source.backup(dest)
         files = {"records.db": snapshot, "workspace.json": workspace.path / "workspace.json"}
+        for name in ("desktop-settings.json", "desktop-version.json"):
+            if (workspace.path / name).exists():
+                files[name] = workspace.path / name
+        queue_path = workspace.path / "desktop-jobs.sqlite"
+        if queue_path.exists():
+            queue_snapshot = Path(temporary) / "desktop-jobs.sqlite"
+            with sqlite3.connect(queue_path) as source, sqlite3.connect(queue_snapshot) as dest:
+                source.backup(dest)
+            files["desktop-jobs.sqlite"] = queue_snapshot
         files.update(
             {
                 str(p.relative_to(workspace.path)): p
@@ -59,7 +68,14 @@ def restore_backup(source, output):
             if (
                 path.is_absolute()
                 or ".." in path.parts
-                or name not in {"records.db", "workspace.json"}
+                or name
+                not in {
+                    "records.db",
+                    "workspace.json",
+                    "desktop-settings.json",
+                    "desktop-version.json",
+                    "desktop-jobs.sqlite",
+                }
                 and not name.startswith(("sources/", "runs/", "exports/", "offline/"))
             ):
                 raise InputError("Unsafe backup entry.")

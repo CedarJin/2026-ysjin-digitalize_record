@@ -114,7 +114,14 @@ def release_zip(release):
     return stream.getvalue()
 
 
-def create_app(workspace, secure_cookies=False, allowed_hosts=None, *, service_factory=DayReviewService):
+def create_app(
+    workspace,
+    secure_cookies=False,
+    allowed_hosts=None,
+    *,
+    service_factory=DayReviewService,
+    desktop_identity=None,
+):
     service = service_factory(workspace)
     app = FastAPI(title="Food record review", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.review = service
@@ -166,7 +173,12 @@ def create_app(workspace, secure_cookies=False, allowed_hosts=None, *, service_f
                 return JSONResponse({"error": "Cross-origin writes are not allowed."}, status_code=403)
             length = request.headers.get("content-length")
             try:
-                if length is None or not 0 <= int(length) <= 64 * 1024 * 1024:
+                limit = (
+                    1024 * 1024 * 1024
+                    if desktop_identity and request.url.path == "/desktop/import/upload"
+                    else 64 * 1024 * 1024
+                )
+                if length is None or not 0 <= int(length) <= limit:
                     return JSONResponse({"error": "Request exceeds the 64 MB upload limit."}, status_code=413)
             except ValueError:
                 return JSONResponse({"error": "Invalid request size."}, status_code=400)
@@ -180,7 +192,8 @@ def create_app(workspace, secure_cookies=False, allowed_hosts=None, *, service_f
         return response
 
     def user(request, owner=False):
-        who = service.authenticate(request.cookies.get("review_session"))
+        # Only the capability-protected desktop wrapper supplies this identity.
+        who = desktop_identity or service.authenticate(request.cookies.get("review_session"))
         if owner and who["role"] != "owner":
             raise ReviewError("Owner access required.", 403)
         if request.method not in {"GET", "HEAD"} and request.headers.get("x-csrf-token") != who["csrf"]:
@@ -532,9 +545,7 @@ def create_app(workspace, secure_cookies=False, allowed_hosts=None, *, service_f
             if not path.exists() or sha256(path.read_bytes()) != package.archive_sha256:
                 raise ReviewError("Stored package is missing or damaged.")
             filename = task_filename(package.manifest)
-        return FileResponse(
-            path, media_type="application/zip", filename=filename
-        )
+        return FileResponse(path, media_type="application/zip", filename=filename)
 
     @app.post("/api/offline/import-result")
     async def offline_return(request: Request):

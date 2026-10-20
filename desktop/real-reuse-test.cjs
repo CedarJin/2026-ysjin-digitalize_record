@@ -1,0 +1,14 @@
+const {_electron:electron,expect}=require('playwright/test');
+const path=require('node:path');const root=path.resolve(__dirname,'..');
+(async()=>{const app=await electron.launch({executablePath:path.join(root,'dist/macos/Food Record-darwin-arm64/Food Record.app/Contents/MacOS/Food Record'),args:['--user-data-dir='+path.join(root,'work/desktop-real-profile')],env:{...process.env,PATH:'/usr/bin:/bin'}});
+try{const page=await app.firstWindow();page.setDefaultTimeout(60000);await page.getByRole('button',{name:'Open study',exact:true}).waitFor();
+await app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},path.join(root,'work/desktop-study'));
+await page.getByRole('button',{name:'Open study',exact:true}).click();await page.getByRole('button',{name:'Process selected',exact:true}).waitFor();
+const state=await page.evaluate(()=>fetch('/desktop/state').then(r=>r.json()));
+if(state.records.filter(r=>r.has_candidate).length!==362)throw Error('Candidate reuse count mismatch');
+if(state.queue.active||state.queue.queued)throw Error('Unexpected processing');
+await page.screenshot({path:path.join(root,'work/desktop-real-records.png')});
+await page.locator('#rows').getByRole('link',{name:'Review',exact:true}).first().click();await page.waitForFunction(()=>document.querySelector('#scan')?.naturalWidth>0);
+await page.screenshot({path:path.join(root,'work/desktop-real-review.png')});
+console.log('362 existing candidates reused; real scan rendered; no queued or active API jobs.');
+}finally{await app.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

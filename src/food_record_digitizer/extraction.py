@@ -24,7 +24,7 @@ def save_response(workspace, run_id, raw):
     response_path.chmod(0o600)
 
 
-def extract_record(workspace, record_id: str, provider, dpi=150, max_pages=20, force=False):
+def extract_record(workspace, record_id: str, provider, dpi=150, max_pages=20, force=False, on_claim=None):
     config = {
         "model": provider.model,
         "prompt_version": PROMPT_VERSION,
@@ -115,6 +115,8 @@ def extract_record(workspace, record_id: str, provider, dpi=150, max_pages=20, f
     raw, usage, error = None, {}, None
     diagnostic = {}
     try:
+        if on_claim is not None:
+            on_claim(run_id)
         import platform
         from importlib.metadata import version
 

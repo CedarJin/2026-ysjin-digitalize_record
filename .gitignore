@@ -20,3 +20,6 @@ dist/
 
 # Local project documentation
 docs/
+
+# Desktop build dependencies
+node_modules/
