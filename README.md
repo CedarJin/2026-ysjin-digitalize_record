@@ -1,221 +1,361 @@
 # Food Record Digitizer
 
-Convert handwritten food records into evidence-linked structured drafts for research review.
+Turn handwritten food-record PDFs into structured, evidence-linked data, with human review before research use. Version **0.4.4** supports single-record and batch imports, concurrent AI extraction, and offline review packages for collaborators.
 
-**Offline review is available (0.4.3).** Study owners export packages with a configurable number of days. Collaborators review locally, resume saved work, and return result files without a shared server or API key. The reviewer launcher bundle is `dist/offline-reviewer-0.4.3.zip` when built locally. Initial setup requires Python 3.11+ and an internet connection to install dependencies; subsequent review sessions work offline.
+The intended workflow is:
 
-Detailed documentation under `docs/` is maintained locally and is not included in this repository. References to those files below apply to the local project checkout.
-**Current milestone: P0–P2.** The package includes incremental ingestion and AI drafts,
-plus the authenticated review workbench: source comparison, editing,
-participant/date assignments, independent review, clarification help, adjudication,
-approval, audit history and frozen research releases. The existing 10-record pilot
-remains **unreviewed** until humans complete these steps.
+**PDFs + metadata → AI drafts → offline human review → owner approval → frozen research release**
 
-Start the local review page:
+The study owner keeps the main workspace on their computer. Collaborators receive ZIP packages, review on their own computers, and return result ZIPs. No shared server is required, and the owner's computer does not need to stay on while collaborators review.
 
-```bash
-.venv/bin/food-record review --workspace work/pilot --port 8765 --env-file /dev/null
-```
+This package transcribes food records. It does not automatically code foods against a nutrient database, estimate nutrient intake, or convert household portions into grams. AI drafts require human checking; a structurally valid result is not proof of transcription accuracy.
 
-Open http://127.0.0.1:8765. See [review user guide](docs/review_user_guide.md),
-[deployment and recovery](docs/review_deployment.md), and [P2 acceptance](docs/p2_status.md).
-Reviewing existing results makes no AI requests and needs no model key.
+## 1. Install on the study owner's computer
 
-Version 0.3.0 reviews all source records for the same participant and intake date together.
-Participant and date follow metadata (0.3.3); only missing or invalid metadata needs attention in **Participant & date**. See [day review and migration](docs/day_review_design.md);
-previous record-level reviews are retained as history and require fresh daily assignments.
+Requirements:
 
-All product pages, CLI help, errors and review instructions use English. Raw source text
-is preserved in its original language.
+- Python 3.11 or newer.
+- Poppler, with `pdftoppm` available on your PATH, for PDF rendering.
+- An OpenAI API key and network access for AI extraction. Extraction uses API billing, not a ChatGPT or Codex subscription.
+- Local storage for PDFs, drafts, review history, and backups.
 
-## Install
-
-Requires Python 3.11+ and Poppler (`pdftoppm` on PATH).
+Clone the repository and install from its root directory:
 
 ```bash
-python -m venv .venv
+git clone https://github.com/CedarJin/2026-ysjin-digitalize_record.git
+cd 2026-ysjin-digitalize_record
+python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[dev]'
-# macOS: brew install poppler
-# Ubuntu/Debian: sudo apt-get install poppler-utils
+python -m pip install -e .
+food-record --version
 food-record --help
 ```
 
-The development environment was tested on Python 3.12. `requirements-tested.txt` records
-its resolved runtime and test dependencies. PostgreSQL review transactions and concurrent-save conflicts have been integration-tested.
-Use the deployment guide for a team server.
-Local use can retain a SQLite workspace behind one server process; do not share its database file
-across reviewers. The public Python service functions use SQLAlchemy sessions.
+On Windows, create the environment with `py -3 -m venv .venv` and activate it with `.venv\Scripts\Activate.ps1` in PowerShell. The examples below use a macOS/Linux shell; on Windows, enter multiline commands on one line.
 
-## Configure
+Install Poppler using your operating system's package manager, for example:
 
-Create `.env` in the working directory using `.env.example`. Never commit credentials.
-Existing environment variables override `.env`. Dotenv content is parsed as text, not executed.
+```bash
+# macOS
+brew install poppler
+# Ubuntu / Debian
+sudo apt-get install poppler-utils
+```
+
+On Windows, install a Poppler distribution and add its executable directory to PATH. Check that `pdftoppm -h` works before extraction. The workflow has been exercised on macOS; Windows/Linux launcher scripts are provided, but have not had equivalent end-to-end testing on those operating systems.
+
+Run subsequent commands from the repository root with the virtual environment activated. After closing a terminal, activate `.venv` again. You do not need to reinstall each time.
+
+## 2. Prepare your study inputs
+
+Use stable record IDs in PDF filenames:
+
+```text
+incoming/batch-001/
+  R0001.pdf
+  R0001-A1.pdf
+  R0002.pdf
+  metadata.csv
+```
+
+`R0001.pdf` is the main record. `R0001-A1.pdf` is a clarification attachment to that record, not a separate food record. Additional attachments can use `-A2`, `-A3`, and so on. An attachment without its main PDF cannot be extracted.
+
+Prepare metadata as CSV, XLSX, or JSON. Example CSV:
+
+```csv
+record_id,subject_id,data_type,date,timepoint,flag
+R0001,P001,hab,2026-01-15,baseline,
+R0002,P002,hab,,baseline,
+```
+
+| Column | Meaning |
+| --- | --- |
+| `record_id` | Record identifier matching the PDF stem, without `.pdf`. Required. |
+| `subject_id` | Stable participant identifier used to group records. |
+| `data_type` | Your study's record type, such as `hab` or `pat`. |
+| `date` | Actual intake date, preferably `YYYY-MM-DD`; leave blank if unknown. |
+| `timepoint` | Study visit or timepoint. |
+| `flag` | Source notes or known issues; `don't use` puts a record into exclusion-pending status. |
+
+Keep identifiers as text, including leading zeros. XLSX uses the first worksheet; CSV uses UTF-8. JSON accepts a single object or a list of objects. Duplicate IDs, unexpected columns, and malformed rows are rejected rather than silently discarded. An attachment does not require its own metadata row; if supplied, its metadata is retained.
+
+**Participant and intake date follow metadata.** Records for the same participant and known date are reviewed together. If the date is absent or invalid, it remains unknown: the page shows **Date unknown**, and the structured date is `null`. You do not have to invent or confirm a date. Undated source days remain separate review units so unrelated records are not merged. Missing participant identifiers still need attention.
+
+Metadata-only records with no PDFs remain in the import report but do not appear in the review queue or review packages. If a record has a PDF but a specifically listed attachment is missing, that missing evidence still needs attention.
+
+## 3. Create a workspace and import records
+
+Use a new workspace and project identifier for each study. Do not reuse this project's local pilot workspace for an unrelated study.
+
+```bash
+food-record init --workspace work/my-study --project my-study --name 'My diet study'
+food-record inspect --input incoming/batch-001 --metadata incoming/batch-001/metadata.csv --pages
+food-record ingest --workspace work/my-study --input incoming/batch-001 --metadata incoming/batch-001/metadata.csv
+food-record report --workspace work/my-study
+```
+
+`inspect` checks inputs without importing them. `ingest` archives source files and metadata in the workspace and returns a batch ID. Keep that ID if you want to extract only that batch. Review missing sources, duplicates, and exclusion flags in `report` before proceeding.
+
+For one record, use a metadata JSON file such as:
+
+```json
+{"record_id":"R0003","subject_id":"P003","data_type":"hab","date":null,"timepoint":"baseline","flag":null}
+```
+
+```bash
+food-record ingest-one --workspace work/my-study --pdf incoming/R0003.pdf --metadata incoming/R0003.json --attachment incoming/R0003-A1.pdf
+```
+
+Omit `--attachment` when there is none; repeat it for multiple attachments.
+
+## 4. Configure and run AI extraction
+
+Copy `.env.example` to `.env` and edit it locally:
 
 ```dotenv
 OPENAI_API_KEY=your-key
 OPENAI_MODEL=gpt-6.1-sol
 ```
 
-API extraction sends the selected scans and attachments to the configured provider and
-uses that provider's billing. It does not consume a Codex subscription. No model request
-is made by inspect, init, ingest, report, schema or export-draft. `extract --dry-run` is also
-local. Explicitly confirm institutional data handling and the selected scope before a live run.
+Use a model available to your API project and compatible with this package's image and structured-output requests. `OPENAI_BASE_URL` can specify the endpoint required by your project. Existing environment variables override `.env`. Never include `.env` in a reviewer package or commit it to Git.
 
-## Inspect and import a batch
+For reproducible settings, create `configs/my-study.toml`:
 
-```bash
-food-record inspect --input clean_record --metadata clean_record/record_mata.xlsx \
-  --pages --output work/inventory.json
-food-record init --workspace work/study --project study --name 'Diet study'
-food-record ingest --workspace work/study --input clean_record \
-  --metadata clean_record/record_mata.xlsx
-food-record report --workspace work/study
+```toml
+[extraction]
+model = "gpt-6.1-sol"
+workers = 3
+limit = 20
+max_pages = 20
+dpi = 150
+image_max_edge = 1200
+jpeg_quality = 70
+max_output_tokens = 32000
+max_output_ceiling = 64000
+request_timeout = 1200
 ```
 
-Metadata columns: `record_id`, `subject_id`, `data_type`, `date`, `timepoint`, `flag`.
-XLSX reads the first worksheet; CSV uses UTF-8; JSON accepts an object or a list of objects.
-Keep identifiers as text. ISO dates are preferred; unresolved raw dates such as `NA` are
-retained and flagged, not guessed. Duplicate metadata IDs, duplicated/unnamed columns,
-unexpected fields and inconsistent table row widths reject the import rather than silently
-discarding or overwriting values. Duplicate JSON field names are rejected too.
-
-`R0251.pdf` is the main source for `R0251`. `R0251-A1.pdf` and `R0251-A2.pdf` are
-clarification attachments, never separate intake records. An attachment without its main
-PDF is registered but cannot be extracted. An attachment may arrive without its own metadata
-row; existing main metadata is retained. File-specific metadata rows, when supplied, are preserved.
-
-Both metadata modes (`delta` and `snapshot`) merge supplied complete rows without deleting
-absent records. A supplied empty field clears that field. No fuzzy identity matching occurs.
-The input report retains file/metadata mismatches and duplicate file contents for review.
-Duplicate-content detection also compares sources imported in earlier batches; the processing
-report lists duplicates among all current project sources. A listed attachment with no scan
-creates an explicit missing-source issue in the draft.
-
-## Import one record or add an attachment
+First preview a small scope without contacting the API:
 
 ```bash
-food-record ingest-one --workspace work/study --pdf incoming/R0401.pdf \
-  --metadata incoming/R0401.json --attachment incoming/R0401-A1.pdf
-food-record attach --workspace work/study --record-id R0401 \
-  --attachment incoming/R0401-A2.pdf
+food-record extract --workspace work/my-study --record-id R0001 --config configs/my-study.toml --dry-run
 ```
 
-Single-record metadata example:
-
-```json
-{"record_id":"R0401","subject_id":"S001","data_type":"hab","date":"2026-10-01","timepoint":"pre","flag":null}
-```
-
-## Extract selected drafts
-
-Preview the scope, then run the same command without `--dry-run`:
+After confirming the files and your study's authorization to send them to the provider, remove `--dry-run`:
 
 ```bash
-food-record extract --workspace work/study --record-id R0401 --dry-run
-food-record extract --workspace work/study --record-id R0401 --config configs/pilot.toml
-# Alternatively select a returned batch ID, or only pending/failed records:
-food-record extract --workspace work/study --batch-id BATCH_ID --limit 10
-food-record extract --workspace work/study --pending-only --limit 10
+food-record extract --workspace work/my-study --record-id R0001 --config configs/my-study.toml
 ```
 
-Repeated `--record-id` selects several complete record groups. A request includes the main
-PDF and all current attachments. The model reads images before deterministic metadata
-comparison; metadata values are not inserted into the model's transcription prompt.
-Maximum pages, rendering DPI and output tokens are bounded. Oversized groups fail explicitly;
-attachments are not silently omitted. Blank or malformed PDFs are retained with error status.
-
-A matching successful input-revision/model/prompt/schema/render configuration is cached. Changing
-input creates a new revision. Existing candidates remain immutable. `--force` explicitly
-creates a new candidate; it never overwrites old content. Model outputs cannot set human
-review completion or resolve issues. A record changed during extraction rejects the stale
-result. Current CLI processing is sequential, with a database claim preventing two workers
-from extracting the same record concurrently.
-
-Rendering verifies archived source hashes and cached PNG checksums/completeness. Incomplete
-or changed image caches are regenerated, and new images are published only after verification.
-If an archived source fails its hash check, extraction fails before contacting the model;
-restore that source from a verified backup. Restoring old metadata values creates a new input
-revision and cannot silently reuse a candidate bound to a prior revision.
-
-Failures are recorded per run. Authentication/availability/rate-limit failures stop the batch.
-There are no automatic billable retries in P1: after inspecting `report`, rerun the affected
-record. Timeouts have an unknown remote outcome and may incur costs on retry.
-If a worker was interrupted, first verify that it has stopped, then release its claim:
+For a batch, replace `BATCH_ID` with the value returned by ingestion:
 
 ```bash
-food-record recover-run --workspace work/study --run-id RUN_ID --worker-stopped
+food-record extract --workspace work/my-study --batch-id BATCH_ID --limit 100 --config configs/my-study.toml --dry-run
+food-record extract --workspace work/my-study --batch-id BATCH_ID --limit 100 --config configs/my-study.toml
+food-record report --workspace work/my-study
 ```
 
-## Inspect the result
+`--limit` is the maximum number of records selected by that command, not a package size or page count. Set it to cover the intended batch. CLI options override TOML settings. You can repeat `--record-id` to select several records or use `--pending-only` for pending/failed records.
+
+Each record is a separate request containing its main scan and current attachments. `--workers 3` processes up to three records concurrently; the supported range is 1–8, with a default of 1 when not configured. Count other running extraction commands separately. Authentication, configuration, and rate-limit errors stop new dispatch; requests already in flight finish.
+
+The standard image preparation preserves original PDFs and full-page rendered images, then creates smaller transport images for AI: maximum edge 1200 pixels and JPEG quality 70. For small handwriting, configure a larger edge or use `--image-max-edge 0` to send the original rendered image. Compression reduces upload size but does not guarantee a proportionate reduction in model time or cost.
+
+The versioned execution policy allows a 32,000-token attempt followed by a 64,000-token attempt **only after confirmed output truncation**. Timeouts are not automatically retried because the remote outcome and billing may be unknown. Invalid output is saved for diagnosis and is never accepted as a valid draft.
+
+Matching successful inputs and configuration are cached. Avoid `--force` unless you intend to create another billable candidate. The package retains input revisions, prompts, model settings, raw responses, and run durations for traceability.
+
+## 5. Open the owner's review workspace
+
+Initialize the first owner account once:
 
 ```bash
-food-record export-draft --workspace work/study --output outputs/draft-001.json
+food-record review-init-owner --workspace work/my-study --email owner@example.org --name 'Study owner'
+```
+
+The command prints a private, one-time `invitation_url` valid for 24 hours. Start the local server:
+
+```bash
+food-record review --workspace work/my-study --port 8765
+```
+
+Keep this terminal running. Open the printed invitation URL in a browser, set a password of 12–256 characters, and log in with the owner email you supplied. For later sessions, start the same server command and open **http://127.0.0.1:8765**. This address is local to your computer; it is not a collaborator invitation.
+
+The initial owner setup is separate from registering offline reviewers. Reviewing existing drafts makes no AI requests and needs no API key.
+
+In **People & policy**:
+
+- Use **Add an offline reviewer** to register each collaborator's name and email. No email is sent, and collaborators do not need accounts or passwords.
+- Set the number of required independent reviews, high-risk review requirements, and optional double-review sampling before assigning work. Saving a new policy invalidates affected current reviews and approvals; frozen releases remain unchanged.
+
+## 6. Export offline review packages
+
+1. Open **Day review queue** and select the units to assign.
+2. Click **Export review packages**, choose a reviewer, and set **Days per package**.
+3. Click **Create review packages**.
+4. Under **Offline packages**, use **Download review package** and send the ZIP to that reviewer through your study's chosen file-sharing channel.
+
+The package-size parameter counts complete review units, not food items or PDFs. A known participant/date unit includes all its records and attachments; undated units are kept separate. For example, 23 selected units with a package size of 10 produce packages of 10, 10, and 3. Filenames include the reviewer's name and a package identifier.
+
+For independent double review, export assignments for two different reviewers. Each receives the original frozen draft, without the other's answers. If a reviewer already has a current task for a selected unit, download the existing package or return/reassign the task instead of creating a duplicate.
+
+Do not send your workspace database, API key, or owner credentials to reviewers.
+
+## 7. Give collaborators the reviewer tool
+
+A review task ZIP contains data; it is **not** the reviewer application. First-time reviewers need both the tool and their task package.
+
+Build a launcher bundle from this checkout:
+
+```bash
+python -m pip install build
+python -m build --wheel
+python scripts/build_offline_bundle.py
+```
+
+Send `dist/offline-reviewer-0.4.4.zip` together with the reviewer's task ZIP. Generated bundles are local build outputs and are not included in a fresh Git clone. Use version 0.4.4 or newer for packages containing unknown dates.
+
+Reviewer instructions:
+
+1. Install Python 3.11+ if needed. Extract the **tool ZIP** to a writable folder.
+2. Run **Open Reviewer.command** on macOS or **Open Reviewer.bat** on Windows. On Linux, run `python3 start_reviewer.py` from the extracted folder.
+3. First launch requires internet access to install dependencies. Later review sessions work offline. No API key or Poppler is needed for current packages with page previews.
+4. On **Open review package**, select the **task ZIP**, without unpacking or repacking it.
+5. Open a review unit, compare the scans and metadata, and correct the food entries. **Time** and **Label (optional)** are separate editable fields within **Food items**. Either may remain blank when not recorded; a meal label is not inferred from time.
+6. After checking a source page, click **I checked the whole page**. Check attachment usage and issue reminders. Ordinary reminders do not require a note for every issue; structural errors must be corrected.
+7. Changes save automatically. Confirm **All changes saved**, then **Submit review** for the unit.
+8. When every unit is complete, return to **Package overview**, click **Export results**, and send the result ZIP back to the owner.
+
+Keep the launcher terminal open during review. Reopening the same task package on the same computer resumes saved progress, normally stored under `~/.food-record-reviewer/`. Computers do not synchronize automatically. Keep the original task ZIP and local saved data until the owner has received the results.
+
+If a reviewer finds a correction after submitting, use **Edit review**, make the change, submit again, and export a new result ZIP. Tell the owner it is a revision. Previously downloaded ZIPs do not update themselves.
+
+Alternatively, a collaborator with the package already installed can run:
+
+```bash
+food-record offline-review --input path/to/review-package.zip --workspace work/local-review
+```
+
+Use the same explicit workspace on later runs to resume that work.
+
+## 8. Import reviews, approve, and export research data
+
+1. In **Offline packages → Import returned results**, select the returned result ZIP.
+2. Check its receipt. **Accepted for comparison** means the review was received, not that the data is approved.
+3. Open the corresponding unit and inspect submissions in **Review & decisions**. Compare independent reviews and record an adjudication when needed.
+4. Once the required current reviews and checks are complete, use **Approve for research** (or **Approve selected** in the queue).
+5. Select approved units and click **Create release**. Download the **CSV + JSON archive**, also available under **Research releases**.
+
+Repeated import of the same result is detected. Outdated inputs/tasks require a new review. If a task has a different returned result, both versions are retained for comparison rather than silently overwriting the first.
+
+A release is a frozen snapshot. Later input changes or reviews do not rewrite it. Use a new release for revised research data.
+
+### Use the release in an analysis
+
+| File | Contents |
+| --- | --- |
+| `records.json` | Approved structured records with nested values and provenance. |
+| `food_items.csv` | Food items, their event references, and participant/date/source identifiers. |
+| `eating_events.csv` | Separate time, meal-label, and place fields. |
+| `record_days.csv` | Intake-day fields. |
+| `issues.csv` | Recorded issues and resolutions. |
+| `export_manifest.json` | Release identity and file checksums. |
+| `review_history.json`, `actors.json` | Review history and attribution. |
+| `processing_report.*`, `source_processing_report.json` | Included scope and source-processing status. |
+
+CSV fields containing structured values or evidence are JSON-encoded. For example, parse `description` and read its `normalized` property rather than treating the entire cell as the food name. Unknown values are `null`, not zero. To associate foods with time/label, join food items to events on **both `record_id` and `event_id`**. Release `record_id` identifies the review unit; `source_record_ids` retains original source IDs.
+
+Example after extracting a release ZIP:
+
+```python
+import csv
+import json
+from pathlib import Path
+
+release = Path("outputs/release-001")
+with (release / "food_items.csv").open(encoding="utf-8", newline="") as stream:
+    foods = list(csv.DictReader(stream))
+for food in foods:
+    description = json.loads(food["description"])
+    print(food["subject_id"], food["date"], description["normalized"])
+```
+
+Use `records.json` when you need the full nested representation. CSV text is escaped where necessary to prevent spreadsheet formula execution. This output is a reviewed transcription dataset; study-specific food coding, nutrient linkage, and statistical analysis are subsequent steps.
+
+For inspection before review, a separate draft export is available:
+
+```bash
+food-record export-draft --workspace work/my-study --output outputs/draft-001.json
 food-record schema --output outputs/schema.json
 ```
 
-Draft exports include current input snapshots, evidence, candidate provenance and a full
-processing report. They explicitly contain `draft: true` and `research_approved: false`.
-Export files cannot silently overwrite existing outputs. No approved research export command
-exists yet. Unknown portions must remain unknown; bowls are not converted to grams.
+Draft exports explicitly have `draft: true` and `research_approved: false`. Do not substitute them for approved releases. Export commands do not overwrite an existing output file.
 
-## Files and recovery
+## 9. Add more records later
 
-- `workspace.json`: project and storage version, without database credentials.
-- `sources/`: source PDFs addressed by SHA-256, retained across revisions.
-- `records.db`: local P0/P1 state, input revisions, candidates and run/audit history.
-- `rendered/`: cached page images, replaceable from source PDFs.
-- `runs/<run_id>/response.json`: restricted local raw responses, including invalid output.
+Continue using the same study workspace. Import a new folder and metadata, then extract the returned batch ID as in steps 3–4. You do not need to initialize a new study or re-extract unchanged records.
 
-Back up the database and sources together while no importer/extractor is running. These files,
-real sources, exports and `.env` are ignored by Git. The local workspace contains research
-data and should remain in an approved storage location. Schema migration beyond storage
-version 1 is not yet supported; do not silently open future versions with older code.
-
-## Development checks
+To add an attachment to an existing record:
 
 ```bash
+food-record attach --workspace work/my-study --record-id R0001 --attachment incoming/R0001-A2.pdf
+food-record extract --workspace work/my-study --record-id R0001 --config configs/my-study.toml --dry-run
+```
+
+After checking the scope, run without `--dry-run`. Changed sources or metadata create a new input revision. Affected reviews become stale and need fresh assignments; prior history and releases remain available.
+
+Both metadata import modes (`delta` and `snapshot`) merge supplied rows without deleting absent records. Treat a supplied row as a complete replacement of that row's fields: empty values clear prior values. Do not send partial rows unless that clearing is intended.
+
+## 10. Timing, backups, and recovery
+
+Export timing reports from this checkout:
+
+```bash
+python scripts/export_extraction_timings.py --workspace work/my-study --output outputs/timings
+```
+
+`record-timings.csv` summarizes each record; `extraction-runs.csv` lists individual attempts. Durations include preprocessing, API waiting, and saving, not just model generation. Manual retries have separate rows. Unavailable historical durations remain blank.
+
+Keep the whole workspace together: `records.db`, `sources/`, `runs/`, `offline/`, and `workspace.json` hold the study's state and evidence. Rendered images can be regenerated from archived sources. Do not share a live SQLite database file across computers.
+
+Stop the review server with Ctrl+C and stop or finish all import/extraction jobs before backup:
+
+```bash
+food-record backup --workspace work/my-study --output outputs/my-study-backup.zip --server-stopped
+food-record restore --input outputs/my-study-backup.zip --output work/my-study-restored
+```
+
+Restore into a new directory. Keep an additional copy of backups outside the working computer. Source files, workspaces, exports, `.env`, and local `docs/` are excluded from Git; pushing the repository does not back up your research data. Review and result ZIPs are not encrypted.
+
+## Troubleshooting
+
+| Symptom | What to do |
+| --- | --- |
+| `Unexpected archive entry` when opening a ZIP | Select the task ZIP, not the tool bundle or a returned result ZIP. Do not repack it. |
+| **Export results** is disabled | Submit every unit in the package; a reopened review must be submitted again. |
+| `Review incomplete` | Check all source pages, attachment usage, and structural issues shown in the review. |
+| Missing intake date | Leave it unknown. It does not need a fabricated date or confirmation. |
+| Missing participant | Correct metadata or use **Participant & date** to resolve the identity. |
+| `This reviewer already has a current task...` | Download the issued package, or use **Review & decisions → Assignments → Return / reassign** before creating a new task. |
+| Old test review appears in **Previous record reviews** | Use **Hide from history**. This only hides your legacy entry; it preserves saved data and current daily tasks. |
+| Failed extraction | Read `report` and the run status. Rerun only the failed record after diagnosis; timeout retries may incur another charge. |
+| `incorrect_hostname` from the API | Set `OPENAI_BASE_URL` to the official endpoint required by your API project; do not rotate a key solely for this error. |
+| Interrupted worker leaves an active claim | Verify the worker has actually stopped, then use the recovery command below. |
+
+```bash
+food-record recover-run --workspace work/my-study --run-id RUN_ID --worker-stopped
+```
+
+Do not recover a claim merely because a request is slow. The default per-attempt timeout is 1200 seconds.
+
+## Development and scope
+
+All user-interface text and CLI messages are English; source transcriptions retain the original language. Local Chinese documentation under `docs/` is not distributed in Git; this README is intended to be sufficient for a new study owner.
+
+```bash
+python -m pip install -e '.[dev]'
 python -m pytest -q
 python -m ruff check src tests
 ```
 
-Tests use synthetic PDFs and mock provider responses; they make no external API requests.
-See [P0 input contract](docs/input_contract.md), [data dictionary](docs/data_dictionary.md),
-[P0–P1 verification status](docs/p0_p1_status.md) and [development plan](docs/development_plan.md).
-
-### Regional endpoint authentication
-
-If OpenAI returns `incorrect_hostname`, set `OPENAI_BASE_URL` in your local `.env`
-to the official regional endpoint required by your project (for example,
-`https://us.api.openai.com/v1`). A hostname mismatch can return HTTP 401 even with
-a valid key. The CLI preserves allowlisted error details without storing raw error
-messages that may contain credentials. Do not rotate a key solely for this error.
-
-Execution uses the versioned `bounded-extraction-v1` policy described in
-[Reproducible execution](docs/reproducible_execution.md). Defaults are 1200 seconds per
-attempt and a fixed 32,000 → 64,000 output budget schedule. Only a confirmed output-token
-truncation triggers the second attempt. Timeouts have unknown billing outcomes and are
-not retried automatically. Configuration changes invalidate the workflow cache.
-
-### Standard image preparation
-
-Every extraction preserves the original PDF and verified full-page PNG rendering, then
-prepares a transport copy for AI: maximum edge 1200 pixels, aspect ratio preserved, no
-cropping or upscaling, JPEG quality 70. A smaller PNG is retained if JPEG offers no saving
-and resizing is unnecessary. Page labels and attachments are unchanged.
-Use `--image-max-edge 2000 --jpeg-quality 90` for small handwriting, or
-`--image-max-edge 0` to send the original rendered PNG. Allowed nonzero edges are 1000–4096;
-JPEG quality is 60–95. The same settings are available as `image_max_edge` and
-`jpeg_quality` in extraction TOML. Resolution loss can hide handwriting; retained originals
-remain the review reference. Compression reduces upload bytes, not necessarily output
-generation time or billed image tokens.
-
-Preprocessing version and parameters participate in the candidate cache key. Each run
-records original/sent pixel dimensions, bytes and format per page. Changed settings create
-a new candidate when explicitly extracted; old candidates remain in history. Existing
-pre-compression pilot candidates remain valid historical drafts with their original settings.
-
-The default output ceiling is 32,000 tokens per record request. Override it with
-`--max-output-tokens` or `max_output_tokens` in TOML. This is a maximum, not a required
-output size. Long outputs may need a longer request timeout; truncated JSON is never
-accepted as a valid candidate.
+Tests use synthetic sources and mock providers, without billable AI calls. `requirements-tested.txt` records tested dependencies. Start with a small study-specific pilot and check legibility, transcription quality, and the complete review/return/release workflow before processing a large dataset.

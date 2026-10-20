@@ -119,7 +119,7 @@ class OfflineManager:
                 {
                     "id": unit.id,
                     "subject_id": unit.subject_id,
-                    "date": unit.date,
+                    "date": svc.labels(unit)["date"] or "",
                     "input_version": unit.input_version,
                     "fingerprint": unit.fingerprint,
                     "snapshot": copy.deepcopy(snapshot),

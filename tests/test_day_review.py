@@ -144,14 +144,13 @@ def test_metadata_overrides_scan_and_reimport_invalidates_review(day_review, tmp
         assert session.get(db.DayReviewTask, task).status == "stale"
 
 
-def test_pending_membership_cannot_be_waived_and_manual_source_included(day_review, tmp_path):
+def test_undated_source_does_not_block_dated_review_and_manual_source_included(day_review, tmp_path):
     svc, owner, a, b, h = day_review
     add_source(svc.workspace, tmp_path, "R002", date=None, dates=["2026-01-01"])
-    rid = svc.queue(owner)[0]["record_id"]
+    rid = next(r["record_id"] for r in svc.queue(owner) if r["date"])
     task = svc.assign(owner, rid, a)
     finish(svc, a, task)
-    with pytest.raises(ReviewError, match="structural"):
-        svc.approve(owner, rid)
+    svc.approve(owner, rid)
     add_source(svc.workspace, tmp_path, "R003", candidate=False)
     detail = svc.detail(owner, rid)
     assert "R003" in detail["snapshot"]["documents"]
@@ -205,6 +204,15 @@ def test_legacy_drafts_preserved_and_default_web_uses_days(day_review):
     assert browser.get("/api/grouping").status_code == 200
     assert svc.archive(a)[0]["task_id"] == oldtask
     assert svc.archive(b) == []
+    with pytest.raises(ReviewError, match="not found"):
+        svc.hide_archive(b, oldtask)
+    saved = svc.archive(a)[0]["content"]
+    svc.hide_archive(a, oldtask)
+    svc.hide_archive(a, oldtask)
+    assert svc.archive(a) == []
+    with svc.factory() as s:
+        assert s.get(db.ReviewTask, oldtask).draft == saved
+
     with pytest.raises(ReviewError, match="superseded"):
         svc.save(a, oldtask, 1, {})
     assert browser.post(

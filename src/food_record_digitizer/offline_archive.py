@@ -7,8 +7,8 @@ import io
 import json
 import re
 import stat
-import zipfile
 import unicodedata
+import zipfile
 from pathlib import PurePosixPath
 
 from .review import ReviewError

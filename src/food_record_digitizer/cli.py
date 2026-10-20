@@ -35,7 +35,7 @@ def parser():
     root = argparse.ArgumentParser(
         description="Digitize handwritten food records into traceable review drafts."
     )
-    root.add_argument("--version", action="version", version="food-record-digitizer 0.4.3")
+    root.add_argument("--version", action="version", version="food-record-digitizer 0.4.4")
     sub = root.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init", help="Create a persistent project workspace")
     init.add_argument("--project", required=True)
@@ -66,6 +66,7 @@ def parser():
     extraction.add_argument("--config", type=Path, help="TOML extraction settings")
     extraction.add_argument("--model")
     extraction.add_argument("--limit", type=int, default=20)
+    extraction.add_argument("--workers", type=int, default=1, help="Concurrent records (1–8)")
     extraction.add_argument("--max-pages", type=int, default=20)
     extraction.add_argument("--dpi", type=int, default=150)
     extraction.add_argument("--max-output-tokens", type=int, default=32000)
@@ -248,6 +249,7 @@ def execute(args):
         allowed = {
             "model",
             "limit",
+            "workers",
             "max_pages",
             "dpi",
             "max_output_tokens",
@@ -446,6 +448,9 @@ def execute(args):
     elif args.command == "extract":
         if (
             args.limit < 1
+            or not isinstance(args.workers, int)
+            or isinstance(args.workers, bool)
+            or not 1 <= args.workers <= 8
             or args.max_pages < 1
             or not 72 <= args.dpi <= 300
             or args.max_output_tokens < 1
@@ -474,31 +479,31 @@ def execute(args):
                 {
                     "records": [{"record_id": r.record_id, "state": r.state} for r in records],
                     "api_calls": 0,
+                    "workers": args.workers,
                     "execution_policy": policy,
                 }
             )
             return 0
-        provider = OpenAIProvider(
-            args.model or os.environ.get("OPENAI_MODEL", "gpt-6.1-sol"),
-            args.max_output_tokens,
-            timeout=args.request_timeout,
-            image_max_edge=args.image_max_edge,
-            jpeg_quality=args.jpeg_quality,
-            max_output_ceiling=args.max_output_ceiling,
-        )
+        from .batch import run_batch
+
+        def worker(record_id):
+            provider = OpenAIProvider(
+                args.model or os.environ.get("OPENAI_MODEL", "gpt-6.1-sol"),
+                args.max_output_tokens,
+                timeout=args.request_timeout,
+                image_max_edge=args.image_max_edge,
+                jpeg_quality=args.jpeg_quality,
+                max_output_ceiling=args.max_output_ceiling,
+            )
+            try:
+                return extract_record(workspace, record_id, provider, args.dpi, args.max_pages, args.force)
+            finally:
+                provider.close()
+
         failed = False
-        try:
-            for record in records:
-                result = extract_record(
-                    workspace, record.record_id, provider, args.dpi, args.max_pages, args.force
-                )
-                emit(result)
-                failed |= result["status"] in {"failed", "stale", "busy"}
-                # Authentication/configuration problems affect every record: stop the batch.
-                if result.get("error") in {"api_http_401", "api_http_403", "api_http_404", "api_http_429"}:
-                    break
-        finally:
-            provider.close()
+        for result in run_batch([r.record_id for r in records], worker, args.workers):
+            emit(result)
+            failed |= result["status"] in {"failed", "stale", "busy"}
         return 1 if failed else 0
     return 0
 

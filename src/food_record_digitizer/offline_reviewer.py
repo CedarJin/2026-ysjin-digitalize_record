@@ -72,9 +72,11 @@ class OfflineReviewer:
             for u in m["units"]:
                 if any(
                     not isinstance(u[k], str) or not u[k]
-                    for k in ("id", "task_id", "subject_id", "date", "fingerprint")
+                    for k in ("id", "task_id", "subject_id", "fingerprint")
                 ):
                     raise ValueError("identity")
+                if not isinstance(u["date"], str):
+                    raise ValueError("date")
                 if type(u["input_version"]) is not int or u["input_version"] < 1:
                     raise ValueError("version")
                 content = RecordContent.model_validate(u["content"])

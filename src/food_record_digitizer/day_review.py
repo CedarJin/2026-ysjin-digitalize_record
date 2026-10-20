@@ -102,13 +102,13 @@ class DayReviewService(ReviewService):
             )
         day_date = days[0]["date"].get("normalized")
         sid = content.get("subject", {}).get("normalized")
-        if (day_date is not None and day_date != record.date) or (
+        if (day_date is not None and day_date != iso_date(record.date)) or (
             sid is not None and sid != record.subject_id
         ):
             raise ReviewError(
                 "Subject and date must match this group. Ask the owner to correct source grouping first."
             )
-        if final and (day_date != record.date or sid != record.subject_id):
+        if final and (day_date != iso_date(record.date) or sid != record.subject_id):
             raise ReviewError("Confirm the grouped subject and date with source evidence before approval.")
         return super().checked(content, record, snapshot, baseline, final)
 
@@ -123,14 +123,14 @@ class DayReviewService(ReviewService):
                 row.update(self.labels(unit))
                 row["has_candidate"] = any(m["candidate_id"] for m in unit.snapshot["members"])
                 result.append(row)
-            return sorted(result, key=lambda r: (r["subject_id"], r["date"]))
+            return sorted(result, key=lambda r: (r["subject_id"], r["date"] or ""))
 
     @staticmethod
     def labels(unit):
         return {
             "review_unit_type": "participant_date",
             "subject_id": unit.subject_id,
-            "date": unit.date,
+            "date": iso_date(unit.date),
             "source_record_ids": sorted({m["record_id"] for m in unit.snapshot["members"]}),
         }
 
@@ -193,6 +193,8 @@ class DayReviewService(ReviewService):
                     db.Record.project_id == self.project_id, db.Record.state != "excluded"
                 )
             ):
+                if not current_snapshot(s, r)["documents"]:
+                    continue
                 c = ReviewService.latest(self, s, r)
                 for p in s.scalars(
                     select(db.DayPlacement).where(
@@ -222,8 +224,8 @@ class DayReviewService(ReviewService):
 
     def resolve_placement(self, actor_id, placement_id, revision, subject_id, date, reason):
         sid, day_date = subject(subject_id), iso_date(date)
-        if not sid or not day_date or not reason.strip():
-            raise ReviewError("A subject, ISO date (YYYY-MM-DD) and grouping reason are required.")
+        if not sid or (date and not day_date) or not reason.strip():
+            raise ReviewError("A subject and grouping reason are required. Leave an unknown date blank.")
         with self.factory.begin() as s:
             actor = self.actor(s, actor_id, True)
             p = s.get(db.DayPlacement, placement_id)
@@ -326,10 +328,39 @@ class DayReviewService(ReviewService):
                 raise ReviewError("Source day not found.", 404)
             return current_snapshot(s, s.get(db.Record, p.record_pk))
 
+    def hide_archive(self, actor_id, task_id):
+        """Hide an own legacy draft from the list without deleting any review data."""
+        with self.factory.begin() as s:
+            actor = self.actor(s, actor_id)
+            task = s.get(db.ReviewTask, task_id)
+            record = s.get(db.Record, task.record_pk) if task else None
+            if not record or record.project_id != self.project_id or task.assignee_id != actor.id:
+                raise ReviewError("Previous review not found.", 404)
+            hidden = s.scalar(
+                select(db.Audit).where(
+                    db.Audit.project_id == self.project_id,
+                    db.Audit.actor_id == actor.id,
+                    db.Audit.action == "archive_review_hidden",
+                    db.Audit.target_id == task.id,
+                )
+            )
+            if not hidden:
+                self.audit(s, actor, "archive_review_hidden", task.id, {"record_id": record.record_id})
+            return {"hidden": True}
+
     def archive(self, actor_id):
         """Own saved record drafts only: never expose an independent reviewer's answers."""
         with self.factory() as s:
             actor = self.actor(s, actor_id)
+            hidden = set(
+                s.scalars(
+                    select(db.Audit.target_id).where(
+                        db.Audit.project_id == self.project_id,
+                        db.Audit.actor_id == actor.id,
+                        db.Audit.action == "archive_review_hidden",
+                    )
+                )
+            )
             return [
                 {
                     "record_id": r.record_id,
@@ -344,6 +375,7 @@ class DayReviewService(ReviewService):
                     .join(db.Record, db.Record.id == db.ReviewTask.record_pk)
                     .where(db.Record.project_id == self.project_id, db.ReviewTask.assignee_id == actor.id)
                 )
+                if t.id not in hidden
             ]
 
 

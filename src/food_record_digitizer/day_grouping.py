@@ -35,8 +35,6 @@ def proposal(record, candidate, day, snapshot):
     problems = []
     if not ms:
         problems.append("Metadata participant is missing.")
-    if not md:
-        problems.append("Metadata intake date is missing or invalid.")
     return (
         {
             "metadata_subject": ms,
@@ -46,7 +44,7 @@ def proposal(record, candidate, day, snapshot):
             "problems": problems,
         },
         ms or cs,
-        md or cd,
+        md,
     )
 
 
@@ -288,6 +286,8 @@ def sync_day_units(service):
             if record.state == "excluded":
                 continue
             source = current_snapshot(s, record)
+            if not source["documents"]:
+                continue
             candidate = s.scalar(
                 select(Candidate)
                 .where(Candidate.record_pk == record.id, Candidate.input_version == record.input_version)
@@ -356,10 +356,16 @@ def sync_day_units(service):
                 if p.status == "needs_confirmation":
                     unresolved.append(item)
                 else:
-                    groups[(p.subject_id, p.date)].append(item)
+                    # Unknown dates cannot establish same-day membership across records.
+                    separate = (record.record_id, p.day_id) if not p.date else None
+                    groups[(p.subject_id, p.date or "", separate)].append(item)
         active = set()
-        for (sid, day_date), members in sorted(groups.items()):
-            unit_id = "day-" + digest([service.project_id, sid, day_date])[:24]
+        for (sid, stored_date, separate), members in sorted(groups.items()):
+            day_date = stored_date or None
+            identity = [service.project_id, sid, day_date]
+            if separate:
+                identity.append(separate)
+            unit_id = "day-" + digest(identity)[:24]
             active.add(unit_id)
             pending = []
             for p, r, c, source in unresolved:
@@ -380,7 +386,7 @@ def sync_day_units(service):
             unit = s.get(DayReviewUnit, unit_id)
             if not unit:
                 unit = DayReviewUnit(
-                    id=unit_id, project_id=service.project_id, subject_id=sid, date=day_date, input_version=0
+                    id=unit_id, project_id=service.project_id, subject_id=sid, date=stored_date or "unknown:" + unit_id, input_version=0
                 )
                 s.add(unit)
                 s.flush()

@@ -370,6 +370,10 @@ def create_app(workspace, secure_cookies=False, allowed_hosts=None, *, service_f
     def archive(request: Request):
         return service.archive(user(request)["id"])
 
+    @app.post("/api/record-review-archive/{task_id}/hide")
+    def hide_archive(request: Request, task_id: str):
+        return service.hide_archive(user(request)["id"], task_id)
+
     @app.get("/api/offline/settings")
     def offline_settings(request: Request):
         from .db import OfflineSettings
