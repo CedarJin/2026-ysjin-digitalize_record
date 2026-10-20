@@ -1,0 +1,10 @@
+[extraction]
+model = "gpt-6.1-sol"
+limit = 10
+max_pages = 20
+dpi = 150
+max_output_tokens = 32000
+request_timeout = 1200
+image_max_edge = 1200
+jpeg_quality = 70
+max_output_ceiling = 64000
