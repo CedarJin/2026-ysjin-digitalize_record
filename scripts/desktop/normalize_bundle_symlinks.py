@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 
 
-def normalize_bundle_symlinks(bundle: Path) -> tuple[int, int]:
+def normalize_bundle_symlinks(bundle: Path, check_only: bool = False) -> tuple[int, int]:
     """Rewrite in-bundle absolute symlinks as relative links and validate all links.
 
     Absolute symlinks make a packaged app depend on the build machine's directory
@@ -36,6 +36,8 @@ def normalize_bundle_symlinks(bundle: Path) -> tuple[int, int]:
             raise ValueError(f"Symlink escapes the app bundle: {link} -> {raw_target}") from exc
 
         if Path(raw_target).is_absolute():
+            if check_only:
+                raise ValueError(f"Absolute symlink is not portable: {link} -> {raw_target}")
             relative_target = os.path.relpath(target, link.parent)
             link.unlink()
             link.symlink_to(relative_target)
@@ -48,8 +50,11 @@ def normalize_bundle_symlinks(bundle: Path) -> tuple[int, int]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("bundle", type=Path, help="PyInstaller onedir output directory")
+    parser.add_argument(
+        "--check-only", action="store_true", help="Reject absolute links without modifying files"
+    )
     args = parser.parse_args()
-    rewritten, checked = normalize_bundle_symlinks(args.bundle)
+    rewritten, checked = normalize_bundle_symlinks(args.bundle, check_only=args.check_only)
     print(f"Validated {checked} bundled symlinks; rewrote {rewritten} absolute links.")
 
 

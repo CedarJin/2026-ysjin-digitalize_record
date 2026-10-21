@@ -1,6 +1,6 @@
 {
   "name": "food-record-desktop",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "Food record research workspace for Apple Silicon",
   "main": "main.cjs",

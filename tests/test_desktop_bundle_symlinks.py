@@ -56,3 +56,37 @@ def test_rejects_links_outside_bundle(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="escapes the app bundle"):
         normalize_bundle_symlinks(bundle)
+
+
+def test_rejects_cyclic_links(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "a").symlink_to("b")
+    (bundle / "b").symlink_to("a")
+    with pytest.raises(ValueError, match="Broken or cyclic symlink"):
+        normalize_bundle_symlinks(bundle)
+
+
+def test_check_only_rejects_absolute_without_changing_link(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    library = bundle / "library"
+    library.write_bytes(b"library")
+    link = bundle / "link"
+    link.symlink_to(library)
+    with pytest.raises(ValueError, match="Absolute symlink"):
+        normalize_bundle_symlinks(bundle, check_only=True)
+    assert link.readlink() == library
+
+
+def test_normalized_bundle_remains_valid_after_move(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    library = bundle / "library"
+    library.write_bytes(b"library")
+    (bundle / "link").symlink_to(library)
+    normalize_bundle_symlinks(bundle)
+    moved = tmp_path / "relocated"
+    bundle.rename(moved)
+    assert normalize_bundle_symlinks(moved, check_only=True) == (0, 1)
+    assert (moved / "link").read_bytes() == b"library"

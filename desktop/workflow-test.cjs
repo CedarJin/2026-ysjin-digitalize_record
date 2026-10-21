@@ -1,7 +1,7 @@
 const {_electron:electron,expect}=require('playwright/test');
 const fs=require('node:fs');const path=require('node:path');
 const root=path.resolve(__dirname,'..'), qa=JSON.parse(fs.readFileSync(path.join(root,'work/desktop-qa-manifest.json')));
-const executablePath=path.join(root,'dist/macos/Food Record-darwin-arm64/Food Record.app/Contents/MacOS/Food Record');
+const executablePath=process.env.FOOD_RECORD_TEST_APP||path.join(root,'dist/macos/Food Record-darwin-arm64/Food Record.app/Contents/MacOS/Food Record');
 async function launch(profile){const app=await electron.launch({executablePath,args:['--user-data-dir='+path.join(qa.folder,profile)],env:{...process.env,PATH:'/usr/bin:/bin'}});const page=await app.firstWindow();page.setDefaultTimeout(15000);await page.getByRole('button',{name:'Open study',exact:true}).waitFor({timeout:60000});return {app,page};}
 async function choose(app,target){await app.evaluate(({dialog},target)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[target]});},target);}
 async function submit(page){await page.locator('#check-current').click();await page.locator('#save-now').click();await page.locator('#submit').click();await page.locator('dialog [data-accept]').click();await page.getByRole('button',{name:'Edit review',exact:true}).waitFor();}
