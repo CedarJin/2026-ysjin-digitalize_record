@@ -9,9 +9,9 @@ const fake='synthetic-key-not-a-real-api-credential';
 async function launch(){
  const app=await electron.launch({executablePath:path.resolve(__dirname,'../dist/macos/Food Record-darwin-arm64/Food Record.app/Contents/MacOS/Food Record'),args:['--user-data-dir='+profile],env:{...process.env,PATH:'/usr/bin:/bin'}});
  const page=await app.firstWindow();
- await page.getByRole('button',{name:'Open study',exact:true}).waitFor({timeout:60000});
+ await page.getByRole('button',{name:'Continue a study',exact:true}).waitFor({timeout:60000});
  await app.evaluate(({dialog},study)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[study]});},study);
- await page.getByRole('button',{name:'Open study',exact:true}).click();
+ await page.getByRole('button',{name:'Continue a study',exact:true}).click();
  await page.getByRole('button',{name:'Add records',exact:true}).waitFor({timeout:60000});
  return {app,page};
 }

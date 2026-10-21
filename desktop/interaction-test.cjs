@@ -8,9 +8,9 @@ const root=path.resolve(__dirname,'..');
  const app=await electron.launch({executablePath:path.join(root,'dist/macos/Food Record-darwin-arm64/Food Record.app/Contents/MacOS/Food Record'),args:['--user-data-dir='+path.join(qa.folder,'interaction-owner')],env:{...process.env,PATH:'/usr/bin:/bin'}});
  try{
   const page=await app.firstWindow();page.setDefaultTimeout(20000);
-  await page.getByRole('button',{name:'Open study',exact:true}).waitFor({timeout:60000});
+  await page.getByRole('button',{name:'Continue a study',exact:true}).waitFor({timeout:60000});
   await app.evaluate(({dialog},study)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[study]});},qa.study);
-  await page.getByRole('button',{name:'Open study',exact:true}).click();
+  await page.getByRole('button',{name:'Continue a study',exact:true}).click();
   await page.getByRole('link',{name:'Review',exact:true}).click();
   await page.locator('tr').filter({hasText:'P001'}).getByRole('button',{name:'Review now',exact:true}).click();
   await expect(page.locator('#submit')).toHaveText('Submit & next');

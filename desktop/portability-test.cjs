@@ -29,12 +29,11 @@ function run(command,args,env=process.env){return new Promise((resolve,reject)=>
   console.log('Original backend and packaged app paths are unavailable; running relocated ZIP');
   app=await electron.launch({executablePath,args:['--user-data-dir='+path.join(area,'new-user')],env:{...process.env,PATH:'/usr/bin:/bin'}});
   const page=await app.firstWindow();
-  await page.getByRole('button',{name:'Create study',exact:true}).waitFor({timeout:60000});
+  await page.getByRole('button',{name:'Start a new study',exact:true}).waitFor({timeout:60000});
   const study=path.join(area,'New researcher study');
   await app.evaluate(({dialog},filePath)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath});},study);
-  await page.locator('#study-name').fill('New researcher study');
-  await page.getByRole('button',{name:'Create study',exact:true}).click();
-  await page.getByRole('heading',{name:'New researcher study',exact:true}).waitFor({timeout:60000});
+  await page.getByRole('button',{name:'Start a new study',exact:true}).click();
+  await page.getByRole('heading',{name:'Add records',exact:true}).waitFor({timeout:60000});
   const state=await page.evaluate(()=>fetch('/desktop/state').then(r=>r.json()));
   assert.equal(state.records.length,0);assert.equal(state.queue.active,0);assert.equal(state.queue.queued,0);
   assert(fs.existsSync(path.join(study,'workspace.json')));assert(fs.existsSync(path.join(study,'records.db')));

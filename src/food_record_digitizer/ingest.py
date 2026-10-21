@@ -15,7 +15,7 @@ from pathlib import Path
 from pypdf import PdfReader
 from sqlalchemy import select
 
-from .db import Audit, Batch, InputRevision, Project, Record
+from .db import Audit, Batch, Candidate, InputRevision, Project, Record
 from .schemas import Metadata
 
 
@@ -154,6 +154,31 @@ class BlobStore:
             count, error = 0, "unreadable_pdf"
         return {"sha256": sha, "page_count": count, "error": error}
 
+    def named_copy(self, source_id: str, sha: str, version: int) -> str:
+        Metadata(record_id=source_id)
+        directory = self.root / "records" / source_id
+        directory.mkdir(parents=True, exist_ok=True)
+        target = directory / (source_id + ("" if version == 1 else f"-v{version}") + ".pdf")
+        if target.exists():
+            if hashlib.sha256(target.read_bytes()).hexdigest() != sha:
+                raise InputError(
+                    "A managed source filename conflicts with different content. Restore a verified backup."
+                )
+        else:
+            data = self.verified_path(sha).read_bytes()
+            fd, name = tempfile.mkstemp(dir=directory)
+            temporary = Path(name)
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(data)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                temporary.chmod(0o400)
+                os.replace(temporary, target)
+            finally:
+                temporary.unlink(missing_ok=True)
+        return str(target.relative_to(self.root))
+
     def path(self, sha: str) -> Path:
         if not re.fullmatch(r"[a-f0-9]{64}", sha):
             raise InputError("Invalid blob hash")
@@ -234,6 +259,10 @@ def ingest_batch(
     paths: list[Path],
     rows: list[Metadata],
     actor: str = "local-operator",
+    source_names: dict[str, str] | None = None,
+    import_context: dict | None = None,
+    reuse_metadata_candidates: bool = False,
+    source_details: dict[str, dict] | None = None,
 ) -> dict:
     report = inspect_inputs(paths, rows)
     # Files and metadata can arrive separately; merge only supplied document/row IDs.
@@ -254,10 +283,25 @@ def ingest_batch(
                 session.add(record)
                 session.flush()
             snapshot = current_snapshot(session, record)
+            previous_documents = dict(snapshot["documents"])
+            previous_version = record.input_version
             for source in sources:
                 source_id = source["source_record_id"]
                 if source_id in incoming:
-                    snapshot["documents"][source_id] = {**incoming[source_id], **source}
+                    previous_document = snapshot["documents"].get(source_id, {})
+                    document = {**incoming[source_id], **source}
+                    if source_details and source_id in source_details:
+                        document["attachment_original"] = source_details[source_id]
+                    if previous_document.get("sha256") == document["sha256"]:
+                        for key in ("original_filename", "managed_file", "attachment_original"):
+                            if previous_document.get(key):
+                                document[key] = previous_document[key]
+                    elif source_names and source_id in source_names:
+                        document["original_filename"] = source_names[source_id]
+                        document["managed_file"] = store.named_copy(
+                            source_id, document["sha256"], record.input_version + 1
+                        )
+                    snapshot["documents"][source_id] = document
                 if source_id in metadata:
                     snapshot["metadata"][source_id] = metadata[source_id]
             fingerprint = digest(snapshot)
@@ -284,6 +328,46 @@ def ingest_batch(
                 record.state = "exclusion_pending"
             else:
                 record.state = "pending_extraction"
+            if (
+                reuse_metadata_candidates
+                and previous_documents == snapshot["documents"]
+                and record.state == "pending_extraction"
+            ):
+                previous_candidate = None
+                for candidate in session.scalars(
+                    select(Candidate)
+                    .where(Candidate.record_pk == record.id)
+                    .order_by(Candidate.created_at.desc(), Candidate.id.desc())
+                ):
+                    revision = session.scalar(
+                        select(InputRevision).where(
+                            InputRevision.record_pk == record.id,
+                            InputRevision.version == candidate.input_version,
+                        )
+                    )
+                    if revision and revision.snapshot["documents"] == snapshot["documents"]:
+                        previous_candidate = candidate
+                        break
+                if previous_candidate:
+                    content = json.loads(canonical(previous_candidate.content))
+                    for page in content.get("pages", []):
+                        page["reviewed"] = False
+                    session.add(
+                        Candidate(
+                            record_pk=record.id,
+                            input_version=record.input_version,
+                            content=content,
+                            provenance={
+                                **previous_candidate.provenance,
+                                "source_candidate_id": previous_candidate.id,
+                                "ai_input_version": previous_candidate.provenance.get(
+                                    "ai_input_version", previous_version
+                                ),
+                                "metadata_update": {"from": previous_version, "to": record.input_version},
+                            },
+                        )
+                    )
+                    record.state = "pending_review"
             session.add(
                 InputRevision(
                     record_pk=record.id,
@@ -312,6 +396,7 @@ def ingest_batch(
                 "unchanged": unchanged,
                 "source_paths": {p.stem: str(p.resolve()) for p in paths},
                 "metadata_sha256": digest(metadata),
+                **({"import_context": import_context} if import_context else {}),
             },
         )
         session.add(batch)

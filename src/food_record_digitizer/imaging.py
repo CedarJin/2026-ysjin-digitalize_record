@@ -127,6 +127,16 @@ def render_pages(store, snapshot: dict, cache: Path, dpi: int = 150) -> list[dic
                     except (subprocess.SubprocessError, OSError) as exc:
                         raise InputError("PDF rendering failed") from exc
             pages.append(
-                {"source_record_id": source_id, "page_number": page, "role": doc["role"], "path": output}
+                {
+                    "source_record_id": source_id,
+                    "page_number": page,
+                    "role": doc["role"],
+                    "path": output,
+                    **(
+                        {"attachment_origin": doc["attachment_original"]["origin"]}
+                        if doc.get("attachment_original")
+                        else {}
+                    ),
+                }
             )
     return pages

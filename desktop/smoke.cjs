@@ -4,11 +4,11 @@ const path=require('node:path');
  const app=await electron.launch({executablePath:path.resolve(__dirname,'../dist/macos/Food Record-darwin-arm64/Food Record.app/Contents/MacOS/Food Record'),args:['--user-data-dir='+path.resolve(__dirname,'../work/desktop-ui-profile')],env:{...process.env,PATH:'/usr/bin:/bin'}});
  try{
   const page=await app.firstWindow();
-  await page.getByRole('button',{name:'Create study',exact:true}).waitFor({timeout:60000});
+  await page.getByRole('button',{name:'Start a new study',exact:true}).waitFor({timeout:60000});
   await page.screenshot({path:path.resolve(__dirname,'../work/desktop-home.png')});
   console.log('Home loaded in packaged arm64 app');
   await app.evaluate(({dialog})=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[process.cwd()+'/work/desktop-smoke']});});
-  await page.getByRole('button',{name:'Open study',exact:true}).click();
+  await page.getByRole('button',{name:'Continue a study',exact:true}).click();
   await page.getByRole('heading',{name:'Desktop smoke study',exact:true}).waitFor({timeout:60000});
   await page.screenshot({path:path.resolve(__dirname,'../work/desktop-study.png')});
   console.log('Study opened; no Python/Node/Poppler on PATH');

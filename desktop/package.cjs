@@ -13,7 +13,7 @@ packager({
   platform:'darwin', arch:'arm64', name:'Food Record',
   appBundleId:'org.foodrecord.desktop', appVersion:version,
   extendInfo:{LSMinimumSystemVersion:'13.0'},
-  ignore:[/\/(smoke|workflow-test|real-reuse-test|keychain-test|lifecycle-test|portability-test|interaction-test|package)\.cjs$/],
+  ignore:[/\/(smoke|package|.*-test)\.cjs$/],
   overwrite:true, asar:true, prune:true,
   extraResource:[path.resolve(__dirname,'THIRD_PARTY_NOTICES.txt')],
   afterCopyExtraResources:[async({buildPath})=>{

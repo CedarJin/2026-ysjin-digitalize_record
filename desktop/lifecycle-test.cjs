@@ -20,17 +20,17 @@ async function closed(url){
  const appProcess=app.process();
  try{
   const page=await app.firstWindow();
-  await page.getByRole('button',{name:'Open study',exact:true}).waitFor({timeout:60000});
+  await page.getByRole('button',{name:'Continue a study',exact:true}).waitFor({timeout:60000});
   await app.evaluate(({dialog})=>{globalThis.errors=[];dialog.showErrorBox=(title,message)=>errors.push(message);dialog.showMessageBox=async(_win,options)=>{errors.push(options.message);return {response:0};};});
   const initial=page.url();
   await app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},path.join(root,'work'));
-  await page.getByRole('button',{name:'Open study',exact:true}).click();
+  await page.getByRole('button',{name:'Continue a study',exact:true}).click();
   for(let i=0;i<100 && page.url()===initial;i++)await delay(100);
-  await page.getByRole('button',{name:'Open study',exact:true}).waitFor({timeout:60000});
+  await page.getByRole('button',{name:'Continue a study',exact:true}).waitFor({timeout:60000});
   assert((await app.evaluate(()=>errors)).some(s=>s.includes('Unable to open')));
   await closed(initial);
   await app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},study);
-  await page.getByRole('button',{name:'Open study',exact:true}).click();
+  await page.getByRole('button',{name:'Continue a study',exact:true}).click();
   await page.getByRole('button',{name:'Add records',exact:true}).waitFor({timeout:60000});
   const endpoint=new URL(page.url()).origin;
   const children=execFileSync('/bin/ps',['-axo','pid=,ppid=,comm='],{encoding:'utf8'}).split('\n').map(s=>s.trim().split(/\s+/));
@@ -47,9 +47,9 @@ async function closed(url){
  const reopenedProcess=reopened.process();
  try{
   const page=await reopened.firstWindow();
-  await page.getByRole('button',{name:'Open study',exact:true}).waitFor({timeout:60000});
+  await page.getByRole('button',{name:'Continue a study',exact:true}).waitFor({timeout:60000});
   await reopened.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},study);
-  await page.getByRole('button',{name:'Open study',exact:true}).click();
+  await page.getByRole('button',{name:'Continue a study',exact:true}).click();
   await page.getByRole('button',{name:'Add records',exact:true}).waitFor({timeout:60000});
   const endpoint=new URL(page.url()).origin;
   await reopened.close();await closed(endpoint);

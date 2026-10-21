@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import sqlite3
 import tempfile
@@ -29,9 +30,26 @@ def create_backup(workspace, output):
         with sqlite3.connect(workspace.path / "records.db") as source, sqlite3.connect(snapshot) as dest:
             source.backup(dest)
         files = {"records.db": snapshot, "workspace.json": workspace.path / "workspace.json"}
-        for name in ("desktop-settings.json", "desktop-version.json"):
+        for name in (
+            "desktop-settings.json",
+            "desktop-version.json",
+            "desktop-sequence.json",
+            "desktop-current-import.json",
+        ):
             if (workspace.path / name).exists():
                 files[name] = workspace.path / name
+        pending = workspace.path / "desktop-current-import.json"
+        if pending.exists():
+            token = json.loads(pending.read_text()).get("token")
+            if not isinstance(token, str) or not re.fullmatch(r"[0-9a-f]{40}", token):
+                raise InputError("The saved import marker is invalid; resume or discard that import first.")
+            files.update(
+                {
+                    str(p.relative_to(workspace.path)): p
+                    for p in (workspace.path / "desktop-imports" / token).rglob("*")
+                    if p.is_file()
+                }
+            )
         queue_path = workspace.path / "desktop-jobs.sqlite"
         if queue_path.exists():
             queue_snapshot = Path(temporary) / "desktop-jobs.sqlite"
@@ -75,8 +93,10 @@ def restore_backup(source, output):
                     "desktop-settings.json",
                     "desktop-version.json",
                     "desktop-jobs.sqlite",
+                    "desktop-sequence.json",
+                    "desktop-current-import.json",
                 }
-                and not name.startswith(("sources/", "runs/", "exports/", "offline/"))
+                and not name.startswith(("sources/", "runs/", "exports/", "offline/", "desktop-imports/"))
             ):
                 raise InputError("Unsafe backup entry.")
             if hashlib.sha256(archive.read(name)).hexdigest() != expected:

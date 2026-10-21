@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import fcntl
-import hashlib
 import hmac
 import json
 import os
@@ -21,13 +20,22 @@ from sqlalchemy import select
 
 from . import db
 from .backup import create_backup, restore_backup
+from .desktop_archive import inspect_archive
+from .desktop_attachments import previous_attachment_draft, stage_attachment
 from .desktop_export import export_archive
 from .desktop_import import commit_plan, preview_plan
+from .desktop_inputs import reserve_id, stage_proposals
 from .desktop_queue import DEFAULTS, DesktopQueue
-from .ingest import InputError, current_snapshot, read_metadata, split_id
+from .ingest import InputError, current_snapshot, digest
 from .review import DEFAULT_POLICY, ReviewError
 from .review_web import STATIC, create_app
+from .schemas import Metadata
 from .workspace import Workspace
+
+
+class ArchiveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str = Field(min_length=1, max_length=4096)
 
 
 class Settings(BaseModel):
@@ -159,12 +167,40 @@ def study_app(workspace, capability):
             raise InputError("Unknown asset")
         return FileResponse(STATIC / name)
 
+    @app.post("/desktop/study-name")
+    async def rename_study(request: Request):
+        body = await request.json()
+        name = str(body.get("name", "")).strip()
+        if not name or len(name) > 200:
+            raise InputError("Enter a study name of 1–200 characters.")
+        with workspace.factory.begin() as session:
+            session.get(db.Project, workspace.project_id).name = name
+        return {"name": name}
+
     @app.get("/desktop/state")
     def state():
         with workspace.factory() as s:
             name = s.get(db.Project, workspace.project_id).name
+        pending_import, pending_import_error = None, None
+        pointer = workspace.path / "desktop-current-import.json"
+        if pointer.exists():
+            try:
+                token = json.loads(pointer.read_text())["token"]
+                if (
+                    not isinstance(token, str)
+                    or len(token) != 40
+                    or any(c not in "0123456789abcdef" for c in token)
+                ):
+                    raise ValueError("Invalid import token")
+                if not (workspace.path / "desktop-imports" / token / "draft.json").is_file():
+                    raise ValueError("Missing import draft")
+                pending_import = token
+            except (OSError, ValueError, KeyError, TypeError):
+                pending_import_error = "The unfinished import could not be opened. Existing Study records are safe. Restore a verified backup to recover that import, or start a new import from the original files."
         return dict(
             name=name,
+            pending_import=pending_import,
+            pending_import_error=pending_import_error,
             path=str(workspace.path),
             records=queue.records(),
             queue=queue.status(),
@@ -230,12 +266,17 @@ def study_app(workspace, capability):
                     for n in range(1, doc["page_count"] + 1)
                 ],
             )
+            provenance = {"method": "manual_entry", "created_by": who["id"]}
+            prior = previous_attachment_draft(s, record, snapshot)
+            if prior:
+                content, previous_provenance = prior
+                provenance.update(previous_provenance)
             s.add(
                 db.Candidate(
                     record_pk=record.id,
                     input_version=record.input_version,
                     content=content.model_dump(mode="json"),
-                    provenance={"method": "manual_entry", "created_by": who["id"]},
+                    provenance=provenance,
                 )
             )
             record.state = "pending_review"
@@ -297,7 +338,7 @@ def study_app(workspace, capability):
         token = secrets.token_hex(20)
         directory = workspace.path / "desktop-imports" / token
         directory.mkdir(parents=True)
-        files, entries = [], []
+        descriptors = []
         for index, item in enumerate(uploads):
             if not item.filename.lower().endswith(".pdf"):
                 raise InputError("Only PDF sources are supported.")
@@ -306,15 +347,9 @@ def study_app(workspace, capability):
                 raise InputError("Each PDF must be valid and at most 32 MB.")
             name = f"file-{index}.pdf"
             (directory / name).write_bytes(payload)
-            source_id = Path(item.filename).stem
-            try:
-                split_id(source_id)
-            except ValueError:
-                source_id = "R" + hashlib.sha256(payload).hexdigest()[:12]
-            files.append(name)
-            entries.append(dict(file=name, filename=item.filename, source_id=source_id))
+            descriptors.append(dict(file=name, filename=item.filename))
         metadata = form.get("metadata")
-        rows = []
+        metadata_path = None
         if metadata and getattr(metadata, "filename", None):
             suffix = Path(metadata.filename).suffix.lower()
             if suffix not in {".csv", ".xlsx", ".json"}:
@@ -324,17 +359,86 @@ def study_app(workspace, capability):
             if len(payload) > 4 * 1024 * 1024:
                 raise InputError("Metadata must be at most 4 MB.")
             path.write_bytes(payload)
-            rows = [m.model_dump(mode="json") for m in read_metadata(path)]
-        existing = {r["record_id"] for r in rows}
-        for entry in entries:
-            rid, attachment = split_id(entry["source_id"])
-            if attachment is None and rid not in existing and not (metadata and getattr(metadata, "filename", None)):
-                rows.append(
-                    dict(record_id=rid, subject_id=None, date=None, data_type=None, timepoint=None, flag=None)
+            metadata_path = path
+        return stage_proposals(
+            workspace, directory, descriptors, metadata_path, metadata.filename if metadata_path else None
+        )
+
+    @app.post("/desktop/attachments/{record_id}")
+    async def add_attachment(record_id: str, request: Request):
+        form = await request.form(max_files=1, max_fields=4)
+        upload = form.get("file")
+        if upload and getattr(upload, "filename", None):
+            payload = await upload.read(32 * 1024 * 1024 + 1)
+            filename = Path(upload.filename).name
+        else:
+            payload = str(form.get("text", "")).encode("utf-8")
+            filename = "Attachment note.txt"
+        with queue.lock:
+            if queue.status()["active"] or queue.status()["queued"]:
+                raise InputError("Finish queued processing before adding attachments.")
+            record_metadata(record_id)
+            return stage_attachment(workspace, record_id, payload, filename, form.get("origin"))
+
+    @app.get("/desktop/metadata/{record_id}")
+    def record_metadata(record_id: str):
+        with workspace.factory() as session:
+            record = session.scalar(
+                select(db.Record).where(
+                    db.Record.project_id == workspace.project_id, db.Record.record_id == record_id
                 )
-                existing.add(rid)
-        (directory / "upload.json").write_text(json.dumps(dict(files=files)))
-        return dict(token=token, entries=entries, metadata=rows)
+            )
+            if not record:
+                raise InputError("Record not found.")
+            return {
+                "version": record.input_version,
+                "metadata": {
+                    **Metadata(record_id=record_id).model_dump(mode="json"),
+                    **current_snapshot(session, record)["metadata"].get(record_id, {}),
+                },
+            }
+
+    @app.post("/desktop/metadata/{record_id}/{action}")
+    async def change_metadata(record_id: str, action: str, request: Request):
+        body = await request.json()
+        with queue.lock:
+            if queue.status()["active"] or queue.status()["queued"]:
+                raise InputError("Finish queued processing before changing metadata.")
+            current = record_metadata(record_id)
+            if body.get("version") != current["version"]:
+                raise InputError("This record changed. Reload its metadata before continuing.")
+            if action == "preview":
+                metadata = Metadata.model_validate(
+                    {**current["metadata"], **body["metadata"], "record_id": record_id}
+                ).model_dump(mode="json")
+                token = secrets.token_hex(20)
+                directory = workspace.path / "desktop-imports" / token
+                directory.mkdir(parents=True)
+                (directory / "upload.json").write_text(
+                    json.dumps(
+                        {"files": [], "metadata_preview": metadata, "base_version": current["version"]}
+                    )
+                )
+                return {
+                    **preview_plan(workspace, directory, [], [metadata]),
+                    "token": token,
+                    "version": current["version"],
+                }
+            if action != "confirm":
+                raise InputError("Unknown metadata action.")
+            token = body.get("token", "")
+            if (
+                not isinstance(token, str)
+                or len(token) != 40
+                or any(c not in "0123456789abcdef" for c in token)
+            ):
+                raise InputError("Check the metadata changes again before saving.")
+            directory = workspace.path / "desktop-imports" / token
+            manifest = json.loads((directory / "upload.json").read_text())
+            metadata = manifest.get("metadata_preview", {})
+            if metadata.get("record_id") != record_id or manifest.get("base_version") != current["version"]:
+                raise InputError("The metadata preview is no longer current. Check it again.")
+            return commit_plan(workspace, directory, [], [metadata])
 
     @app.post("/desktop/import/{action}")
     async def import_action(action: str, request: Request):
@@ -343,19 +447,81 @@ def study_app(workspace, capability):
         if len(token) != 40 or any(c not in "0123456789abcdef" for c in token):
             raise InputError("Invalid import preview.")
         directory = workspace.path / "desktop-imports" / token
+        if action == "save-draft":
+            manifest = json.loads((directory / "upload.json").read_text())
+            if {e["file"] for e in body["entries"]} != set(manifest["files"]) or len(body["entries"]) != len(
+                manifest["files"]
+            ):
+                raise InputError("The import draft no longer matches its uploaded files.")
+            if len(json.dumps(body).encode()) > 4 * 1024 * 1024:
+                raise InputError("The import draft is too large to save.")
+            target = directory / "draft.json"
+            temporary = target.with_suffix(".tmp")
+            temporary.write_text(json.dumps(body))
+            os.replace(temporary, target)
+            pointer = workspace.path / "desktop-current-import.json"
+            pointer_temporary = pointer.with_suffix(".tmp")
+            pointer_temporary.write_text(json.dumps({"token": token}))
+            os.replace(pointer_temporary, pointer)
+            return {"saved": True}
+        if action == "reserve-id":
+            return {
+                "source_id": reserve_id(
+                    workspace, body.get("parent"), [e["source_id"] for e in body.get("entries", [])]
+                )
+            }
         if action == "preview":
-            return preview_plan(workspace, directory, body["entries"], body["metadata"])
+            report = preview_plan(workspace, directory, body["entries"], body["metadata"])
+            manifest_path = directory / "upload.json"
+            manifest = json.loads(manifest_path.read_text())
+            manifest["checked"] = digest({"entries": body["entries"], "metadata": body["metadata"]})
+            manifest["checked_versions"] = report["versions"]
+            manifest["checked_revisions"] = report["revised_records"]
+            temporary = manifest_path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(manifest))
+            os.replace(temporary, manifest_path)
+            return report
         if action != "confirm":
             raise InputError("Unknown import action.")
         with queue.lock:
             if queue.status()["active"] or queue.status()["queued"]:
                 raise InputError("Finish queued processing before changing study sources.")
-            return commit_plan(workspace, directory, body["entries"], body["metadata"])
+            manifest = json.loads((directory / "upload.json").read_text())
+            with workspace.factory() as session:
+                versions = {
+                    r.record_id: r.input_version
+                    for r in session.scalars(
+                        select(db.Record).where(db.Record.project_id == workspace.project_id)
+                    )
+                }
+            if (
+                manifest.get("checked") != digest({"entries": body["entries"], "metadata": body["metadata"]})
+                or manifest.get("checked_versions") != versions
+            ):
+                raise InputError(
+                    "The files, metadata or study changed. Check the import again before confirming."
+                )
+            if manifest.get("checked_revisions") and body.get("allow_update") is not True:
+                raise InputError("Confirm updating the listed existing records before importing.")
+            result = commit_plan(workspace, directory, body["entries"], body["metadata"])
+            pointer = workspace.path / "desktop-current-import.json"
+            if pointer.exists() and json.loads(pointer.read_text()).get("token") == token:
+                pointer.unlink()
+            return result
+
+    @app.get("/desktop/import-draft/{token}")
+    def load_import_draft(token: str):
+        if len(token) != 40 or any(c not in "0123456789abcdef" for c in token):
+            raise InputError("Invalid saved import.")
+        path = workspace.path / "desktop-imports" / token / "draft.json"
+        if not path.is_file():
+            raise InputError("No saved import was found. Add the source files again.")
+        return json.loads(path.read_text())
 
     @app.get("/desktop/template")
     def template():
         return Response(
-            "record_id,subject_id,data_type,date,timepoint,flag\n",
+            "participant,date\n",
             media_type="text/csv",
             headers={"Content-Disposition": 'attachment; filename="metadata-template.csv"'},
         )
@@ -482,6 +648,13 @@ def main():
         @app.get("/desktop/state")
         def state():
             return {"home": True}
+
+    @app.post("/desktop/inspect-archive")
+    def archive_type(body: ArchiveRequest):
+        try:
+            return inspect_archive(body.path)
+        except InputError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
 
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))

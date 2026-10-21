@@ -89,3 +89,10 @@ def test_transport_compression_does_not_upscale_or_enlarge_small_png(tmp_path):
     data, mime, stats = prepare_image(path)
     assert stats["sent_size"] == [100, 200]
     assert len(data) <= path.stat().st_size
+
+
+def test_attachment_origin_survives_render_cache(source):
+    store, snapshot, cache = source
+    snapshot["documents"]["R001"]["attachment_original"] = {"origin": "researcher_note"}
+    for _ in range(2):
+        assert render_pages(store, snapshot, cache)[0]["attachment_origin"] == "researcher_note"

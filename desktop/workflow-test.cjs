@@ -1,8 +1,10 @@
 const {_electron:electron,expect}=require('playwright/test');
 const fs=require('node:fs');const path=require('node:path');
-const root=path.resolve(__dirname,'..'), qa=JSON.parse(fs.readFileSync(path.join(root,'work/desktop-qa-manifest.json')));
+const root=path.resolve(__dirname,'..');
+require('node:child_process').execFileSync(path.join(root,'.venv/bin/python'),[path.join(root,'scripts/desktop/prepare_qa.py')],{stdio:'ignore'});
+const qa=JSON.parse(fs.readFileSync(path.join(root,'work/desktop-qa-manifest.json')));
 const executablePath=process.env.FOOD_RECORD_TEST_APP||path.join(root,'dist/macos/Food Record-darwin-arm64/Food Record.app/Contents/MacOS/Food Record');
-async function launch(profile){const app=await electron.launch({executablePath,args:['--user-data-dir='+path.join(qa.folder,profile)],env:{...process.env,PATH:'/usr/bin:/bin'}});const page=await app.firstWindow();page.setDefaultTimeout(15000);await page.getByRole('button',{name:'Open study',exact:true}).waitFor({timeout:60000});return {app,page};}
+async function launch(profile){const app=await electron.launch({executablePath,args:['--user-data-dir='+path.join(qa.folder,profile)],env:{...process.env,PATH:'/usr/bin:/bin'}});const page=await app.firstWindow();page.setDefaultTimeout(15000);await page.getByRole('button',{name:'Continue a study',exact:true}).waitFor({timeout:60000});return {app,page};}
 async function choose(app,target){await app.evaluate(({dialog},target)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[target]});},target);}
 async function submit(page){
  await page.locator('#check-current').click();await page.locator('#save-now').click();await page.locator('#submit').click();
@@ -14,7 +16,7 @@ async function submit(page){
 (async()=>{
  let {app,page}=await launch('owner-profile');const errors=[];page.on('pageerror',e=>errors.push(e.message));
  try{
-  await choose(app,qa.study);await page.getByRole('button',{name:'Open study',exact:true}).click();await page.getByRole('heading',{name:'Desktop workflow test'}).waitFor({timeout:60000});
+  await choose(app,qa.study);await page.getByRole('button',{name:'Continue a study',exact:true}).click();await page.getByRole('heading',{name:'Desktop workflow test'}).waitFor({timeout:60000});
   await page.getByRole('button',{name:'Add records',exact:true}).click();
   await page.locator('#pdfs').setInputFiles([path.join(qa.folder,'New scan.pdf'),path.join(qa.folder,'Attachment.pdf')]);
   await page.locator('#metadata').setInputFiles(path.join(qa.folder,'metadata.csv'));
@@ -43,7 +45,7 @@ async function submit(page){
  }catch(e){await page.screenshot({path:path.join(root,'work/desktop-workflow-failure.png')});console.log(await page.locator('body').innerText());throw e;}finally{await app.close();}
  ({app,page}=await launch('reviewer-profile'));
  try{
-  await choose(app,qa.packages[0].path);await page.getByRole('button',{name:'Open review package',exact:true}).click();
+  await choose(app,qa.packages[0].path);await page.getByRole('button',{name:'Review a package',exact:true}).click();
   await page.getByRole('heading',{name:'Review package',exact:true}).waitFor({timeout:60000});
   await page.getByRole('button',{name:'Open',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#scan').naturalWidth>0);
   await submit(page);await page.getByRole('button',{name:'Edit review',exact:true}).click();await page.getByRole('button',{name:'Submit & next'}).waitFor();
