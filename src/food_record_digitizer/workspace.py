@@ -12,7 +12,10 @@ from .ingest import BlobStore, InputError
 
 class Workspace:
     def __init__(self, path: Path):
-        self.path = path.resolve()
+        from .study_layout import engine_path, study_root
+
+        self.path = engine_path(path)
+        self.root = study_root(self.path)
         config = self.path / "workspace.json"
         if not config.exists():
             raise InputError("Workspace not found. Run 'food-record init' first.")
@@ -29,7 +32,7 @@ class Workspace:
         self.store = BlobStore(self.path / "sources")
 
     @classmethod
-    def initialize(cls, path: Path, project_id: str, name: str):
+    def initialize(cls, path: Path, project_id: str, name: str, organized=False):
         from .schemas import Metadata
 
         Metadata(record_id=project_id)
@@ -56,6 +59,12 @@ class Workspace:
             with workspace.factory.begin() as session:
                 if session.get(Project, project_id) is None:
                     session.add(Project(id=project_id, name=name))
+            if organized:
+                from .study_layout import organize
+
+                workspace.factory.kw["bind"].dispose()
+                organize(path)
+                return cls(path)
             return workspace
         except Exception:
             config.unlink()

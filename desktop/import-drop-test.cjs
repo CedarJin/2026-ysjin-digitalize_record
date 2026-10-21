@@ -38,7 +38,7 @@ async function drop(page,files){
   await expect(page.locator('[data-meta="0"][data-field="record_id"]')).toHaveValue('');
   await page.locator('[data-meta="0"][data-field="record_id"]').selectOption('R0002');
   await page.locator('[data-meta="1"][data-field="record_id"]').selectOption('R0001');
-  await page.getByRole('button',{name:'Switch study',exact:true}).click();
+  await page.getByRole('button',{name:'Home',exact:true}).click();
   await page.getByRole('button',{name:'Research study renamed',exact:true}).click();
   await page.getByRole('button',{name:'Resume unfinished import',exact:true}).click();
   await expect(page.locator('[data-meta="0"][data-field="record_id"]')).toHaveValue('R0002');
@@ -47,7 +47,7 @@ async function drop(page,files){
   let state=await page.evaluate(()=>fetch('/desktop/state').then(r=>r.json()));
   assert.equal(state.name,'Research study renamed');assert.equal(state.records.length,2);
   assert.equal(state.records.find(r=>r.record_id==='R0002').metadata.subject_id,'P100');assert.equal(state.records.find(r=>r.record_id==='R0002').metadata.date,null);
-  assert(fs.existsSync(path.join(study,'sources/records/R0001/R0001.pdf')));assert(fs.existsSync(path.join(incoming,'Unsorted A.pdf')));
+  assert(fs.existsSync(path.join(study,'data/sources/records/R0001/R0001.pdf')));assert(fs.existsSync(path.join(incoming,'Unsorted A.pdf')));
   await page.locator('[data-edit-metadata="R0001"]').click();await page.locator('#metadata-participant').fill('P900');await page.locator('#metadata-date').fill('');
   await page.getByRole('button',{name:'Check changes',exact:true}).click();await page.getByRole('button',{name:'Save metadata',exact:true}).click();
   await expect(page.locator('#dialog')).not.toBeVisible();

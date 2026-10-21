@@ -36,7 +36,7 @@ function run(command,args,env=process.env){return new Promise((resolve,reject)=>
   await page.getByRole('heading',{name:'Add records',exact:true}).waitFor({timeout:60000});
   const state=await page.evaluate(()=>fetch('/desktop/state').then(r=>r.json()));
   assert.equal(state.records.length,0);assert.equal(state.queue.active,0);assert.equal(state.queue.queued,0);
-  assert(fs.existsSync(path.join(study,'workspace.json')));assert(fs.existsSync(path.join(study,'records.db')));
+  assert(fs.existsSync(path.join(study,'workspace.json')));assert(fs.existsSync(path.join(study,'.app/records.db')));
   await app.close();app=null;
   console.log('Relocated app created a new study without any developer workspace or API key');
   await run(process.execPath,[path.join(root,'desktop/workflow-test.cjs')],{...process.env,FOOD_RECORD_TEST_APP:executablePath});

@@ -117,6 +117,11 @@ def restore_backup(source, output):
                     connection.execute("DELETE FROM review_sessions")
                 if "review_users" in tables:
                     connection.execute("UPDATE review_users SET invite_hash=NULL, invite_expires=NULL")
+            config = json.loads((output / "workspace.json").read_text())
+            if config.get("organized_layout") == 1:
+                from .study_layout import organize
+
+                organize(output)
         except Exception:
             shutil.rmtree(output)
             raise

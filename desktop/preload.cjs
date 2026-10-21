@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('desktop', Object.freeze({
   openStudy: () => ipcRenderer.invoke('open-study'),
   openReview: () => ipcRenderer.invoke('open-review'),
   home: () => ipcRenderer.invoke('home'),
+  organizedCopy: () => ipcRenderer.invoke('organized-copy'),
   saveKey: key => ipcRenderer.invoke('save-key', String(key)),
   deleteKey: () => ipcRenderer.invoke('delete-key'),
   restore: () => ipcRenderer.invoke('restore'),

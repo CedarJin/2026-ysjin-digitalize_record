@@ -9,6 +9,7 @@ import os
 import secrets
 import socket
 import sys
+import tempfile
 import threading
 from pathlib import Path
 
@@ -30,6 +31,7 @@ from .ingest import InputError, current_snapshot, digest
 from .review import DEFAULT_POLICY, ReviewError
 from .review_web import STATIC, create_app
 from .schemas import MANUAL_DRAFT_METHODS, Metadata
+from .study_layout import engine_path, organize
 from .workspace import Workspace
 
 
@@ -177,6 +179,23 @@ def study_app(workspace, capability):
             raise InputError("Unknown asset")
         return FileResponse(STATIC / name)
 
+    @app.post("/desktop/organized-copy")
+    def organized_copy(body: ArchiveRequest):
+        destination = Path(body.path).expanduser().resolve()
+        if destination.is_relative_to(workspace.root):
+            raise InputError("Save the copy outside the current study folder.")
+        if destination.exists():
+            raise InputError("Choose a new folder for the organized copy. Your current study is unchanged.")
+        with queue.lock:
+            if queue.status()["active"] or queue.status()["queued"]:
+                raise InputError("Finish queued processing before saving an organized study copy.")
+            with tempfile.TemporaryDirectory(prefix="study-copy-") as temporary:
+                archive = Path(temporary) / "study.zip"
+                create_backup(workspace, archive)
+                restore_backup(archive, destination)
+                organize(destination)
+        return {"path": str(destination)}
+
     @app.post("/desktop/study-name")
     async def rename_study(request: Request):
         body = await request.json()
@@ -211,7 +230,7 @@ def study_app(workspace, capability):
             name=name,
             pending_import=pending_import,
             pending_import_error=pending_import_error,
-            path=str(workspace.path),
+            path=str(workspace.root),
             records=queue.records(),
             queue=queue.status(),
             settings=settings(),
@@ -607,7 +626,8 @@ def main():
         if config.get("restore_from"):
             restore_backup(Path(config["restore_from"]), path)
         if config.get("create"):
-            Workspace.initialize(path, "study-" + secrets.token_hex(6), config["name"])
+            Workspace.initialize(path, "study-" + secrets.token_hex(6), config["name"], organized=True)
+        path = engine_path(path)
         raw = json.loads((path / "workspace.json").read_text())
         if raw.get("storage_version") != 1 or raw.get("database") != "sqlite":
             raise InputError("This app supports version 1 local SQLite studies only.")

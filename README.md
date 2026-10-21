@@ -77,14 +77,31 @@ The workflow below describes the **0.6.0 development app**. The published 0.5.1 
 | What you have | Use this entry point |
 | --- | --- |
 | Your own scans and metadata | **Start a new study**, then **Add records** |
-| An existing study | **Continue a study**; choose the folder containing `workspace.json` and `records.db` |
+| An existing study | **Continue a study**; choose the whole study folder containing `workspace.json` |
 | An assigned reviewer ZIP | Drop the ZIP onto the open app, or choose **Review a package**; keep the ZIP intact |
 | A full study backup ZIP | Drop the ZIP onto the app, or choose **Restore backup**; restore into a new folder |
+
+### Study folder organization
+
+New desktop studies use this structure automatically:
+
+```text
+My Study/
+  workspace.json
+  data/sources/             # scans, attachments and original metadata
+  results/extractions/     # saved AI responses and run provenance
+  results/exports/         # default location for downloaded research tables/ZIPs
+  results/review-packages/ # issued tasks and returned review results
+  backups/
+  .app/                    # hidden database, settings, staging and caches
+```
+
+Open the whole **My Study** folder. Organized studies require the current development build; earlier internal installers do not support this container layout. Existing studies still open in their original layout. To reorganize one, finish processing, then choose **Settings → Study folder → Save organized copy** and select a new folder. The app opens the copy; the original is unchanged. No records are reprocessed. Keep the whole study folder together when moving it. **Home** returns to the task chooser.
 
 ### Owner and reviewer workflow
 
 1. Create or continue a study. The app keeps its database and source copies together in the selected study folder; no shared server is required.
-2. In **Add records**, import one scan or a whole folder. Scans without usable IDs receive sequential IDs such as `R0001`; later batches continue the sequence. Check the file associations before importing. The app retains original filenames and flags matching existing sources. You can leave an unfinished import and resume it later.
+2. In **Add records**, use **Choose PDF folder** and select metadata separately below, or choose individual PDFs. **Choose combined folder** imports a folder containing both PDFs and metadata. **Choose different files** returns from the association preview; unfinished associations remain resumable. Scans without usable IDs receive sequential IDs such as `R0001`; later batches continue the sequence. Check the file associations before importing. The app retains original filenames and flags matching existing sources. You can leave an unfinished import and resume it later.
 3. Metadata may contain only `participant,date`. Other fields are optional, and unknown dates may remain blank. If several scans cannot be uniquely matched to metadata rows, select the corresponding scan for each row; row order is not assumed. Metadata rows without a PDF do not become review tasks. Use **Edit metadata** later to correct values; the preview identifies affected reviews. Existing transcription is reused without an AI request when sources are unchanged.
 4. Select records and choose **Process selected**. The confirmation shows current drafts reused and records/pages requiring paid requests. Existing candidates for the current input version are reused. Configure a key and model in **Settings** for new extraction. **Save settings** also saves a newly entered key; a blank key field keeps the saved key. Confirm the status reads **API key: saved**. Select the endpoint assigned to your OpenAI project; US regional projects use `https://us.api.openai.com/v1`, and EU regional projects use `https://eu.api.openai.com/v1`. Desktop settings are separate from a repository `.env` file. The key is encrypted with macOS Keychain protection outside the study. Opening a study never starts AI processing. **Pause** stops new dispatches while in-flight requests finish; **Resume** continues queued work. Unknown remote outcomes require a separate retry confirmation.
 5. Use **Add attachment** beside a record for a PDF, PNG/JPEG or typed text. You can drop one PDF or image directly into the attachment form. Identify it as participant material or a researcher note. The app assigns `R0001-A1`, `R0001-A2`, etc., preserves original content, and prepares readable PDF views for images/text. Check the impact preview before importing. Manual drafts are labeled separately from AI drafts; an empty manual draft does not count as an AI extraction and will not be skipped when you explicitly choose processing. Added attachments require renewed review; old AI drafts have not interpreted them. Choose **Edit manually** to retain compatible previous transcription and check new attachments yourself, or explicitly process the updated record. Adding an attachment does not call AI.

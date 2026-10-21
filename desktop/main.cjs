@@ -42,7 +42,7 @@ async function start(config={mode:'home'}){
     // Wait until the socket is accepting HTTP before navigating.
     for(let n=0;n<100;n++){try{await fetch(origin+'/',{headers:{'X-Desktop-Capability':token}});break;}catch{await new Promise(r=>setTimeout(r,50));}}
     launched.on('exit',()=>{if(child===launched&&!quitting&&!switching){child=null;dialog.showErrorBox('Study closed unexpectedly','Your saved work is retained. Reopen the app; interrupted requests will not restart automatically.');}});
-    if(config.mode==='study'){studyPath=config.path;rememberStudy(config.path,await local('/desktop/state'));}
+    if(config.mode==='study'){const info=await local('/desktop/state');studyPath=info.path;rememberStudy(studyPath,info);}
     await win.loadURL(origin+(config.mode==='review'?'/?launch='+encodeURIComponent(token):config.create?'/?view=import':'/'));
   }finally{switching=false;}
 }
@@ -69,7 +69,7 @@ async function importPaths(paths){
     if(relative.split('/').length>32)throw Error('This folder is nested too deeply. Choose a smaller records folder.');
     const info=await fs.promises.lstat(file);if(info.isSymbolicLink()){ignored++;return;}
     if(info.isDirectory()){
-      if(fs.existsSync(path.join(file,'workspace.json'))&&fs.existsSync(path.join(file,'records.db')))throw Error('This is an existing study folder. Use Continue a study to open it.');
+      if(fs.existsSync(path.join(file,'workspace.json'))&&(fs.existsSync(path.join(file,'records.db'))||fs.existsSync(path.join(file,'.app','records.db'))))throw Error('This is an existing study folder. Use Continue a study to open it.');
       for(const entry of (await fs.promises.readdir(file,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))){
         if(entry.name.startsWith('.'))continue;
         await visit(path.join(file,entry.name),relative?relative+'/'+entry.name:entry.name);
@@ -116,7 +116,7 @@ app.whenReady().then(async()=>{
   session.defaultSession.webRequest.onBeforeRequest((details,callback)=>{const url=details.url;callback({cancel:!(origin&&url.startsWith(origin+'/'))&&!url.startsWith('devtools:')&&!url.startsWith('blob:')});});
   session.defaultSession.webRequest.onBeforeSendHeaders((details,callback)=>{if(origin&&details.url.startsWith(origin+'/'))details.requestHeaders['X-Desktop-Capability']=token;callback({requestHeaders:details.requestHeaders});});
   session.defaultSession.setPermissionRequestHandler((_w,_p,cb)=>cb(false));
-  session.defaultSession.on('will-download',(_event,item)=>{item.setSaveDialogOptions({title:'Save research file',defaultPath:path.join(app.getPath('downloads'),path.basename(item.getFilename()))});});
+  session.defaultSession.on('will-download',(_event,item)=>{let folder=app.getPath('downloads');if(mode==='study'&&studyPath){const organized=fs.existsSync(path.join(studyPath,'.app','workspace.json'));folder=path.join(studyPath,organized?'results/exports':'exports');fs.mkdirSync(folder,{recursive:true});}item.setSaveDialogOptions({title:'Save research file',defaultPath:path.join(folder,path.basename(item.getFilename()))});});
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   win.webContents.on('will-navigate',(event,url)=>{if(!origin||new URL(url).origin!==origin)event.preventDefault();});
   win.on('close',event=>{if(!quitting){event.preventDefault();requestQuit();}});
@@ -130,6 +130,7 @@ app.whenReady().then(async()=>{
   handle('open-dropped',openDropped);
   handle('take-import',()=>{const data=pendingImport;pendingImport=null;return data;});
   handle('choose-inputs',async kind=>{if(mode!=='study')throw Error('Create or continue a study first.');if(!['folder','files'].includes(kind))throw Error('Choose files or a folder.');const chosen=await dialog.showOpenDialog(win,{title:kind==='folder'?'Choose folder with records and metadata':'Choose PDF records and metadata',properties:kind==='folder'?['openDirectory']:['openFile','multiSelections']});if(!chosen.canceled)return openDropped(chosen.filePaths);});
+  handle('organized-copy',async()=>{if(mode!=='study')throw Error('Open a study first.');if(!await canSwitch())return;const chosen=await dialog.showSaveDialog(win,{title:'Save organized study copy',defaultPath:studyPath+' (organized)',buttonLabel:'Save copy'});if(chosen.canceled)return;await local('/desktop/organized-copy',{path:chosen.filePath});await start({mode:'study',path:chosen.filePath});});
   handle('home',async()=>{if(await canSwitch())await start();});
   handle('save-key',key=>{if(mode!=='study')throw Error('Open a study first.');if(!key.trim()||key.length>1024)throw Error('Enter a valid API key.');if(!safeStorage.isEncryptionAvailable())throw Error('Keychain is unavailable.');fs.mkdirSync(app.getPath('userData'),{recursive:true});fs.writeFileSync(keyPath(),safeStorage.encryptString(key.trim()),{mode:0o600});child.stdin.write(JSON.stringify({action:'key',key:key.trim()})+'\n');return {saved:true};});
   handle('delete-key',()=>{if(mode!=='study')throw Error('Open a study first.');if(fs.existsSync(keyPath()))fs.unlinkSync(keyPath());child?.stdin.write(JSON.stringify({action:'key',key:null})+'\n');return {deleted:true};});
