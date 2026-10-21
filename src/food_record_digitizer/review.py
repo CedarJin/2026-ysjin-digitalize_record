@@ -27,8 +27,19 @@ from .db import (
     now,
 )
 from .ingest import current_snapshot, digest
-from .schemas import PageCoverage, RecordContent
+from .schemas import MANUAL_DRAFT_METHODS, PageCoverage, RecordContent
 from .validation import APPROVAL_BLOCKING_CODES, refresh_issues, validate_content
+
+
+def baseline_display_mode(provenance):
+    members = provenance.get("members")
+    sources = (
+        [m.get("candidate_provenance", {"method": "manual_entry_required"}) for m in members]
+        if members
+        else [provenance]
+    )
+    manual = [p.get("method") in MANUAL_DRAFT_METHODS for p in sources]
+    return "manual_draft" if all(manual) else "mixed_draft" if any(manual) else "ai_draft"
 
 
 class ReviewError(Exception):
@@ -1008,7 +1019,9 @@ class ReviewService:
                 if task and task.status == "submitted"
                 else "review_draft"
                 if task
-                else "ai_draft"
+                else baseline_display_mode(candidate.provenance)
+                if candidate
+                else "no_draft"
             )
             if actor.role == "owner" and not blind:
                 if (

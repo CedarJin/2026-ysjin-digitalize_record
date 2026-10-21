@@ -25,7 +25,7 @@ const {execFileSync}=require('node:child_process');const root=path.resolve(__dir
   await page.locator('#close-dialog').click();
   await failed.getByRole('button',{name:'Retry',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Process records',exact:true})).toBeVisible();
-  await expect(page.locator('#dialog')).toContainText('1 existing drafts will be reused');
+  await expect(page.locator('#dialog')).toContainText('1 existing AI drafts will be reused');
   await page.locator('#close-dialog').click();await page.unroute('**/desktop/state');await page.reload();
   for(const kind of ['text','image']){
    await page.locator('[data-add-attachment="R001"]').click();

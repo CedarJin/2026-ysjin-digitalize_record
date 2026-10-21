@@ -495,3 +495,66 @@ def test_desktop_records_exposes_safe_regional_diagnostic(ws, tmp_path):  # noqa
         assert q.status()["active"] == 0
     finally:
         q.close()
+
+
+@pytest.mark.parametrize("method", ["manual_entry", "manual_attachment_update"])
+def test_manual_draft_is_not_reused_as_ai_and_original_is_retained(ws, tmp_path, method):  # noqa: F811
+    from test_extraction import FakeProvider
+
+    add_source(ws, tmp_path, candidate=False)
+    app = study_app(ws, "secret")
+    try:
+        client = TestClient(app, headers={"x-desktop-capability": "secret"})
+        assert client.post("/desktop/manual/R001").status_code == 200
+        day = client.get("/api/records").json()[0]["record_id"]
+        assert client.get("/api/records/" + day).json()["display_mode"] == "manual_draft"
+        exported = client.post("/desktop/export/drafts", json={"ids": ["R001"]})
+        assert exported.status_code == 400
+        assert "No current AI drafts" in exported.json()["error"]
+    finally:
+        app.state.queue.close()
+    with ws.factory.begin() as session:
+        candidate = session.scalar(select(db.Candidate))
+        candidate.provenance = {**candidate.provenance, "method": method}
+        original_id, original_content = candidate.id, candidate.content
+    provider = FakeProvider()
+    q = DesktopQueue(ws, lambda config: provider)
+    try:
+        row = q.records()[0]
+        assert row["state"] == "manual_draft" and row["manual_draft"] and not row["has_ai_candidate"]
+        scope = q.preview(["R001"])
+        assert scope["reuse"] == 0 and scope["requests"] == 1 and scope["manual_drafts"] == 1
+        q.enqueue(["R001"], DEFAULTS, scope["versions"])
+        wait_queue(q)
+        assert provider.calls == 1
+        row = q.records()[0]
+        assert row["state"] == "draft_ready" and row["has_ai_candidate"] and not row["manual_draft"]
+        assert q.preview(["R001"])["reuse"] == 1
+        with ws.factory() as session:
+            assert session.get(db.Candidate, original_id).content == original_content
+            assert len(list(session.scalars(select(db.Candidate)))) == 2
+    finally:
+        q.close()
+
+
+@pytest.mark.parametrize(
+    "provenance,mode",
+    [
+        ({"run_id": "original-ai"}, "ai_draft"),
+        ({"method": "manual_entry"}, "manual_draft"),
+        ({"members": [{"candidate_provenance": {"method": "manual_entry_required"}}]}, "manual_draft"),
+        (
+            {
+                "members": [
+                    {"candidate_provenance": {"run_id": "original-ai"}},
+                    {"candidate_provenance": {"method": "manual_entry"}},
+                ]
+            },
+            "mixed_draft",
+        ),
+    ],
+)
+def test_preview_baseline_label_respects_origin(provenance, mode):
+    from food_record_digitizer.review import baseline_display_mode
+
+    assert baseline_display_mode(provenance) == mode

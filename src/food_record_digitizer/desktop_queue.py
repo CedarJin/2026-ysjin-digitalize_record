@@ -14,6 +14,7 @@ from .db import Candidate, ExtractionRun, Record, now
 from .extraction import extract_record, recover_run
 from .ingest import InputError, current_snapshot
 from .provider import OpenAIProvider
+from .schemas import MANUAL_DRAFT_METHODS
 
 DEFAULTS = dict(
     model="gpt-6.1-sol",
@@ -97,9 +98,14 @@ class DesktopQueue:
                 job = jobs.get(r.record_id, {})
                 if job.get("version") != r.input_version:
                     job = {}
+                manual = bool(candidate) and candidate.provenance.get("method") in MANUAL_DRAFT_METHODS
                 state = (
                     "processing"
                     if r.record_id in self.active
+                    else job["state"]
+                    if manual and job.get("state") in {"queued", "processing", "failed", "needs_attention"}
+                    else "manual_draft"
+                    if manual
                     else "draft_ready"
                     if candidate
                     else "needs_attention"
@@ -115,6 +121,9 @@ class DesktopQueue:
                         pages=sum(d["page_count"] for d in snap["documents"].values()),
                         attachments=sum(d["role"] == "attachment" for d in snap["documents"].values()),
                         has_candidate=bool(candidate),
+                        has_ai_candidate=bool(candidate) and not manual,
+                        manual_draft=manual,
+                        food_items=len(candidate.content.get("items", [])) if candidate else 0,
                         candidate_id=candidate.id if candidate else None,
                         run_id=job.get("run_id") or (run.id if run else None),
                         seconds=job.get("seconds") or (run.elapsed_seconds if run else None),
@@ -131,17 +140,18 @@ class DesktopQueue:
         rows = [r for r in self.records() if r["record_id"] in ids]
         if len(rows) != len(ids):
             raise InputError("Some records no longer exist. Refresh the list.")
-        reusable = [r for r in rows if r["has_candidate"]]
+        reusable = [r for r in rows if r["has_ai_candidate"]]
         eligible = [
             r
             for r in rows
-            if not r["has_candidate"]
+            if not r["has_ai_candidate"]
             and r["state"]
             not in {"missing_source", "blocked", "exclusion_pending", "excluded", "queued", "processing"}
         ]
         return dict(
             records=rows,
             reuse=len(reusable),
+            manual_drafts=sum(r["manual_draft"] for r in eligible),
             requests=len(eligible),
             pages=sum(r["pages"] for r in eligible),
             attachments=sum(r["attachments"] for r in eligible),
@@ -161,7 +171,7 @@ class DesktopQueue:
             for row in preview["records"]:
                 if (
                     row["record_id"] in self.active
-                    or row["has_candidate"]
+                    or row["has_ai_candidate"]
                     or row["state"]
                     in {
                         "missing_source",
@@ -238,7 +248,7 @@ class DesktopQueue:
             row = next(r for r in self.records() if r["record_id"] == rid)
             if row["version"] != version:
                 raise InputError("Sources changed before processing. Select this record again.")
-            if row["has_candidate"]:
+            if row["has_ai_candidate"]:
                 state = "succeeded"
             else:
                 config = json.loads(encoded)

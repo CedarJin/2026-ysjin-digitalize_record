@@ -15,8 +15,13 @@ const {execFileSync}=require('node:child_process');const root=path.resolve(__dir
   await page.getByRole('button',{name:'Continue a study',exact:true}).waitFor({timeout:60000});
   await app.evaluate(({dialog},study)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[study]});},qa.study);
   await page.getByRole('button',{name:'Continue a study',exact:true}).click();
+  await page.getByRole('checkbox',{name:'Select R003',exact:true}).waitFor();
+  await page.evaluate(()=>fetch('/desktop/manual/R003',{method:'POST'}).then(r=>{if(!r.ok)throw Error('Manual fixture failed');}));await page.reload();
+  await expect(page.locator('tr').filter({has:page.getByRole('checkbox',{name:'Select R003',exact:true})})).toContainText('Empty manual draft · AI has not processed this record.');
   const failedRow=page.locator('tr').filter({has:page.getByRole('checkbox',{name:'Select R003',exact:true})});await failedRow.getByText('Details',{exact:true}).click();await expect(failedRow).toContainText('OpenAI requires the regional endpoint https://us.api.openai.com/v1');
   await page.getByRole('checkbox',{name:'Select R003',exact:true}).check();await page.getByRole('button',{name:'Process selected',exact:true}).click();
+  await expect(page.locator('#dialog')).toContainText('1 manual draft has not been processed by AI.');
+  await expect(page.locator('#dialog')).toContainText('0 existing AI drafts will be reused');
   await page.getByRole('button',{name:'Start processing',exact:true}).click();
   await expect(page.locator('#dialog-error')).toContainText('Add your API key');
   await expect(page.locator('#dialog-error')).toBeVisible();

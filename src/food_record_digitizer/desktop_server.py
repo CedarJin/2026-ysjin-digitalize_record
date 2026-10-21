@@ -29,7 +29,7 @@ from .desktop_queue import DEFAULTS, DesktopQueue
 from .ingest import InputError, current_snapshot, digest
 from .review import DEFAULT_POLICY, ReviewError
 from .review_web import STATIC, create_app
-from .schemas import Metadata
+from .schemas import MANUAL_DRAFT_METHODS, Metadata
 from .workspace import Workspace
 
 
@@ -551,7 +551,7 @@ def study_app(workspace, capability):
                     )
                     .order_by(db.Candidate.created_at.desc())
                 )
-                if candidate:
+                if candidate and candidate.provenance.get("method") not in MANUAL_DRAFT_METHODS:
                     snapshot = current_snapshot(s, record)
                     meta = snapshot["metadata"].get(record.record_id, {})
                     records.append(
@@ -559,9 +559,7 @@ def study_app(workspace, capability):
                             record_id=record.record_id,
                             subject_id=meta.get("subject_id"),
                             date=meta.get("date"),
-                            status="manual_draft"
-                            if candidate.provenance.get("method") == "manual_entry"
-                            else "ai_draft",
+                            status="ai_draft",
                             input_version=record.input_version,
                             candidate_id=candidate.id,
                             content=candidate.content,

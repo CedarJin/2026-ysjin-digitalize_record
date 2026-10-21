@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+MANUAL_DRAFT_METHODS = {"manual_entry", "manual_attachment_update", "manual_entry_required"}
+
 
 class Model(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)

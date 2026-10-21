@@ -27,7 +27,7 @@ async function submit(page){
   await page.getByRole('heading',{name:'Desktop workflow test'}).waitFor();
   console.log('Editable batch association + unknown date + missing PDF import passed');
   await page.getByRole('checkbox',{name:'Select R001',exact:true}).check();await page.getByRole('button',{name:'Process selected'}).click();
-  await page.getByText('1 existing drafts will be reused',{exact:true}).waitFor();
+  await page.getByText('1 existing AI drafts will be reused',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Reuse existing results'}).click();console.log('Existing draft reused without key / API');
   await page.getByRole('link',{name:'Review',exact:true}).click();
   await page.locator('tr').filter({hasText:'P001'}).getByRole('button',{name:'Review now',exact:true}).click();
