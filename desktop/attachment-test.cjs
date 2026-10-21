@@ -31,7 +31,17 @@ const {execFileSync}=require('node:child_process');const root=path.resolve(__dir
    await page.locator('[data-add-attachment="R001"]').click();
    await page.locator('#attachment-form [name="origin"]').selectOption(kind==='text'?'researcher_note':'participant_material');
    if(kind==='text')await page.locator('#attachment-form textarea').fill('Researcher clarification: check cup size against participant note.');
-   else await page.locator('#attachment-form [name="file"]').setInputFiles(photo);
+   else {
+    const box=await page.locator('#attachment-form [name="file"]').boundingBox();
+    const session=await page.context().newCDPSession(page);
+    const invalid={items:[],files:[photo,photo],dragOperationsMask:1};
+    for(const type of ['dragEnter','dragOver','drop'])await session.send('Input.dispatchDragEvent',{type,x:box.x+20,y:box.y+10,data:invalid});
+    await expect(page.locator('#attachment-error')).toHaveText('Drop one PDF, PNG or JPEG attachment.');
+    const data={items:[],files:[photo],dragOperationsMask:1};
+    for(const type of ['dragEnter','dragOver','drop'])await session.send('Input.dispatchDragEvent',{type,x:box.x+20,y:box.y+10,data});
+    await session.detach();
+    assert.equal(await page.locator('#attachment-form [name="file"]').evaluate(el=>el.files[0]?.name),'clarification.png');
+   }
    await page.getByRole('button',{name:'Check attachment',exact:true}).click();
    await expect(page.locator('[data-source="0"]')).toHaveValue(kind==='text'?'R001-A1':'R001-A2');
    await expect(page.locator('[data-source="0"]')).toBeDisabled();

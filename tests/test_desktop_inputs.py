@@ -216,3 +216,39 @@ def test_corrupt_pending_import_keeps_study_open_and_original_pointer(ws):
         assert pointer.read_text() == "{broken"
     finally:
         app.state.queue.close()
+
+
+def test_failed_import_copy_rolls_back_and_same_preview_can_retry(ws, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from food_record_digitizer.desktop_server import study_app
+
+    directory = ws.path / "desktop-imports" / ("f" * 40)
+    directory.mkdir(parents=True)
+    pdf(directory / "file-0.pdf")
+    proposal = stage_proposals(ws, directory, [{"file": "file-0.pdf", "filename": "Unsorted.pdf"}])
+    proposal["metadata"][0]["subject_id"] = "P1"
+    app = study_app(ws, "secret")
+    try:
+        client = TestClient(app, headers={"x-desktop-capability": "secret"})
+        checked = client.post("/desktop/import/preview", json=proposal)
+        assert checked.status_code == 200, checked.text
+
+        def fail_copy(*args):
+            raise OSError("Synthetic full disk")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(ws.store, "named_copy", fail_copy)
+            failed = client.post("/desktop/import/confirm", json=proposal)
+            assert failed.status_code == 503
+            assert "free space" in failed.json()["error"]
+        with ws.factory() as session:
+            assert list(session.scalars(select(Record))) == []
+        retried = client.post("/desktop/import/confirm", json=proposal)
+        assert retried.status_code == 200, retried.text
+        assert retried.json()["changed"] == ["R0001"]
+        with ws.factory() as session:
+            records = list(session.scalars(select(Record)))
+            assert len(records) == 1 and records[0].input_version == 1
+    finally:
+        app.state.queue.close()

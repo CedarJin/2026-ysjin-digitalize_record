@@ -27,6 +27,19 @@ window.addEventListener('dragleave',event=>{if(!event.relatedTarget)document.doc
 window.addEventListener('drop',event=>{
   const files=Array.from(event.dataTransfer?.files||[]);if(!files.length)return;
   event.preventDefault();event.stopImmediatePropagation();document.documentElement.classList.remove('desktop-dragging');
+  const attachmentForm=event.target.closest?.('#attachment-form');
+  if(attachmentForm){
+    const error=attachmentForm.querySelector('[role="alert"]');
+    if(files.length!==1||!(/\.(pdf|png|jpe?g)$/i).test(files[0].name)){
+      if(error)error.textContent='Drop one PDF, PNG or JPEG attachment.';
+      return;
+    }
+    const input=attachmentForm.querySelector('input[type="file"]');
+    input.files=event.dataTransfer.files;
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+    if(error)error.textContent='';
+    return;
+  }
   const paths=files.map(file=>webUtils.getPathForFile(file));
   if(paths.some(p=>!p)){dropStatus('Drop files or folders directly from Finder.');return;}
   ipcRenderer.invoke('open-dropped',paths).then(result=>{if(result?.error)dropStatus(result.error);}).catch(error=>dropStatus(error.message));

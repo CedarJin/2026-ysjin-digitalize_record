@@ -121,6 +121,16 @@ def protected(app, capability):
 def study_app(workspace, capability):
     who = identity(workspace)
     app = create_app(workspace, desktop_identity=who)
+
+    @app.exception_handler(OSError)
+    async def file_operation_error(_request, _error):
+        return JSONResponse(
+            {
+                "error": "File operation failed. Check free space and Study folder permissions, then retry. Existing saved data remains available."
+            },
+            status_code=503,
+        )
+
     queue = DesktopQueue(workspace)
     app.state.queue = queue
     # Keep the mature review UI at /review; the new study dashboard owns /.
