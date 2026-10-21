@@ -119,6 +119,9 @@ class DesktopQueue:
                         run_id=job.get("run_id") or (run.id if run else None),
                         seconds=job.get("seconds") or (run.elapsed_seconds if run else None),
                         error=job.get("error") or (run.error_code if run else None),
+                        failure_diagnostic=(run.configuration or {}).get("failure_diagnostic", {})
+                        if run
+                        else {},
                     )
                 )
         return rows
@@ -186,8 +189,29 @@ class DesktopQueue:
                         "INSERT OR REPLACE INTO jobs (record_id,version,state,config) VALUES (?,?, 'queued', ?)",
                         (row["record_id"], row["version"], json.dumps(config)),
                     )
+            with self.connection() as connection:
+                self.update_queued_endpoint(connection, config.get("base_url", DEFAULTS["base_url"]))
             self.paused = False
             return preview
+
+    @staticmethod
+    def update_queued_endpoint(connection, base_url):
+        # A repaired endpoint must reach unsent jobs even when the owner retries
+        # failed records instead of clicking Resume. Keep approved models/limits.
+        for rid, encoded in connection.execute(
+            "SELECT record_id,config FROM jobs WHERE state='queued'"
+        ).fetchall():
+            config = json.loads(encoded)
+            config["base_url"] = base_url
+            connection.execute(
+                "UPDATE jobs SET config=? WHERE record_id=? AND state='queued'", (json.dumps(config), rid)
+            )
+
+    def resume(self, base_url):
+        with self.lock, self.connection() as connection:
+            self.update_queued_endpoint(connection, base_url)
+            self.paused = False
+        return self.status()
 
     def dispatch(self):
         while not self.closed:
@@ -256,6 +280,10 @@ class DesktopQueue:
                     # Transport cleanup must not strand a completed job or lose its result.
                     pass
             with self.lock, self.connection() as c:
+                if error in {"api_http_401", "api_http_403", "api_http_429"}:
+                    # Shared credential/endpoint/rate failures affect the whole queue.
+                    # Keep unsent jobs queued until the owner fixes settings and resumes.
+                    self.paused = True
                 c.execute(
                     "UPDATE jobs SET state=?,finished=?,seconds=?,error=? WHERE record_id=?",
                     (state, now(), time.monotonic() - started, error, rid),

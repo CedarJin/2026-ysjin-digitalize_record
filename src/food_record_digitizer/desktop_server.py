@@ -336,8 +336,7 @@ def study_app(workspace, capability):
     def resume():
         if not queue.key:
             raise InputError("Add your API key in Settings before resuming queued requests.")
-        queue.paused = False
-        return queue.status()
+        return queue.resume(settings()["base_url"])
 
     @app.post("/desktop/import/upload")
     async def upload(request: Request):

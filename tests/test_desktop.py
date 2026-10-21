@@ -423,3 +423,75 @@ def test_import_preview_lists_affected_days_without_changing_study(ws, tmp_path)
     assert same["changed"] == [] and same["unchanged"] == ["R001"]
     assert same["affected_reviews"] == []
     assert list(directory.glob("preview-*")) == []
+
+
+@pytest.mark.parametrize("error", ["api_http_401", "api_http_403", "api_http_429"])
+@pytest.mark.parametrize("recovery", ["resume", "retry"])
+def test_shared_api_failure_pauses_unsent_jobs(ws, tmp_path, monkeypatch, error, recovery):  # noqa: F811
+    add_source(ws, tmp_path, candidate=False)
+    add_source(ws, tmp_path, rid="R002", candidate=False)
+    calls, configs = [], []
+
+    class Provider:
+        def close(self):
+            pass
+
+    def fail(*args, **kwargs):
+        calls.append(args[1])
+        return {"status": "failed", "error": error} if len(calls) == 1 else {"status": "cached"}
+
+    monkeypatch.setattr("food_record_digitizer.desktop_queue.extract_record", fail)
+    q = DesktopQueue(ws, lambda config: configs.append(dict(config)) or Provider())
+    try:
+        preview = q.preview(["R001", "R002"])
+        q.enqueue(["R001", "R002"], {**DEFAULTS, "concurrency": 1}, preview["versions"])
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            status = q.status()
+            if status["paused"] and not status["active"]:
+                break
+            time.sleep(0.02)
+        assert q.status() == {"paused": True, "active": 0, "queued": 1}
+        assert len(calls) == 1
+        if recovery == "resume":
+            q.resume("https://us.api.openai.com/v1")
+        else:
+            retry = q.preview([calls[0]])
+            q.enqueue(
+                [calls[0]],
+                {**DEFAULTS, "concurrency": 1, "base_url": "https://us.api.openai.com/v1"},
+                retry["versions"],
+            )
+        wait_queue(q)
+        assert len(calls) == (2 if recovery == "resume" else 3)
+        assert all(c["base_url"] == "https://us.api.openai.com/v1" for c in configs[1:])
+        assert configs[0]["base_url"] == DEFAULTS["base_url"]
+        assert configs[1]["base_url"] == "https://us.api.openai.com/v1"
+        assert configs[0]["model"] == configs[1]["model"]
+    finally:
+        q.close()
+
+
+def test_desktop_records_exposes_safe_regional_diagnostic(ws, tmp_path):  # noqa: F811
+    add_source(ws, tmp_path, candidate=False)
+    diagnostic = {"provider_code": "incorrect_hostname", "required_base_url": "https://us.api.openai.com/v1"}
+    with ws.factory.begin() as session:
+        record = session.scalar(select(db.Record))
+        session.add(
+            db.ExtractionRun(
+                record_pk=record.id,
+                input_version=record.input_version,
+                cache_key="synthetic-region-check",
+                status="failed",
+                error_code="api_http_401",
+                configuration={"failure_diagnostic": diagnostic},
+            )
+        )
+    q = DesktopQueue(ws)
+    try:
+        row = q.records()[0]
+        assert row["error"] == "api_http_401"
+        assert row["failure_diagnostic"] == diagnostic
+        assert q.status()["active"] == 0
+    finally:
+        q.close()
