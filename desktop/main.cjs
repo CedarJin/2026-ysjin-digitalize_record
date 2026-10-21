@@ -137,5 +137,32 @@ app.whenReady().then(async()=>{
   Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'Food Record',submenu:[{role:'about'},{label:'Open study…',click:()=>win.webContents.executeJavaScript('window.desktop.openStudy()')},{label:'Open review package…',click:()=>win.webContents.executeJavaScript('window.desktop.openReview()')},{type:'separator'},{label:'Quit Food Record',accelerator:'Cmd+Q',click:requestQuit}]},{role:'editMenu'},{role:'viewMenu'}]));
   try{await start();win.show();}catch(e){dialog.showErrorBox('Unable to start Food Record',e.message);quitting=true;app.quit();}
 });
-async function requestQuit(){if(quitting||switching)return;try{if(!await prepareLeave())return;if(mode==='study'&&child){const state=await local('/desktop/state');if(state.queue.active){const choice=await dialog.showMessageBox(win,{type:'question',message:'Processing is still running.',detail:'Stop after current requests pauses new work, saves active results, then closes. Already sent requests may incur charges.',buttons:['Keep processing','Stop after current requests'],defaultId:0,cancelId:0});if(choice.response===0)return;await local('/desktop/process/pause',{});win.setTitle('Food Record — saving current results before closing');}}quitting=true;await stop();app.quit();}catch(e){dialog.showErrorBox('Unable to close safely',e.message);}}
+let quitPending=false;
+async function requestQuit(){
+  if(quitting||quitPending)return;
+  if(switching){win?.setTitle('Food Record — finishing the current operation; please try closing again');return;}
+  quitPending=true;
+  try{
+    if(!await prepareLeave())return;
+    if(mode==='study'&&child){
+      let state;
+      try{state=await local('/desktop/state');}
+      catch{
+        const choice=await dialog.showMessageBox(win,{type:'question',message:'Study status is unavailable.',detail:'You can still close safely. New work will stop, and any requests already running will finish before the app closes.',buttons:['Keep open','Close safely'],defaultId:0,cancelId:0});
+        if(choice.response===0)return;
+      }
+      if(state?.queue.active){
+        const choice=await dialog.showMessageBox(win,{type:'question',message:'Processing is still running.',detail:'Stop after current requests pauses new work, saves active results, then closes. Already sent requests may incur charges.',buttons:['Keep processing','Stop after current requests'],defaultId:0,cancelId:0});
+        if(choice.response===0)return;
+      }
+    }
+    // The stdin stop command pauses the queue and drains active requests itself.
+    // Closing must not depend on a working HTTP status or pause endpoint.
+    win?.setTitle('Food Record — saving current results before closing');
+    quitting=true;
+    await stop();
+    app.quit();
+  }catch(e){quitting=false;dialog.showErrorBox('Unable to close safely',e.message);}
+  finally{quitPending=false;}
+}
 app.on('before-quit',event=>{if(!quitting){event.preventDefault();requestQuit();}});
