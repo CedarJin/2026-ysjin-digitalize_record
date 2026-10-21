@@ -62,7 +62,7 @@ The desktop app wraps this same Python package. It includes Python and a PDF ren
 
 ### Install the app
 
-Obtain the built `Food-Record-0.5.0-macOS-arm64.zip` from the study owner or maintainer. Built installers are not included in this source repository; do not assume a public release download is available.
+Download the installer from the [v0.5.0 testing pre-release](https://github.com/CedarJin/2026-ysjin-digitalize_record/releases/tag/v0.5.0): choose **Food-Record-0.5.0-macOS-arm64.zip**, not the automatically generated Source code archive. A SHA-256 checksum file is provided alongside it. This is a testing preview; read the release notes for compatibility and pending validation.
 
 1. Unzip the **installer ZIP**.
 2. Drag **Food Record.app** into **Applications** and open it.
