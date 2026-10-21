@@ -1,6 +1,6 @@
 # Food Record Digitizer
 
-Turn handwritten food-record PDFs into structured, evidence-linked data, with human review before research use. Version **0.5.0** supports single-record and batch imports, concurrent AI extraction, and offline review packages for collaborators.
+Turn handwritten food-record PDFs into structured, evidence-linked data, with human review before research use. Version **0.5.1** supports single-record and batch imports, concurrent AI extraction, and offline review packages for collaborators.
 
 The intended workflow is:
 
@@ -62,7 +62,7 @@ The desktop app wraps this same Python package. It includes Python and a PDF ren
 
 ### Install the app
 
-Download the installer from the [v0.5.0 testing pre-release](https://github.com/CedarJin/2026-ysjin-digitalize_record/releases/tag/v0.5.0): choose **Food-Record-0.5.0-macOS-arm64.zip**, not the automatically generated Source code archive. A SHA-256 checksum file is provided alongside it. This is a testing preview; read the release notes for compatibility and pending validation.
+Download the installer from the [v0.5.1 testing pre-release](https://github.com/CedarJin/2026-ysjin-digitalize_record/releases/tag/v0.5.1): choose **Food-Record-0.5.1-macOS-arm64.zip**, not the automatically generated Source code archive. A SHA-256 checksum file is provided alongside it. This is a testing preview; read the release notes for compatibility and pending validation.
 
 1. Unzip the **installer ZIP**.
 2. Drag **Food Record.app** into **Applications** and open it.
@@ -106,7 +106,7 @@ python3 -m venv .venv
 ./scripts/desktop/build.sh
 ```
 
-The output is `dist/macos/Food Record-darwin-arm64/Food Record.app`. JavaScript dependencies are pinned in `desktop/package-lock.json`; Python build/PDF dependencies are pinned in the `desktop` extra. The build does not include local studies, `.env`, or `docs`. To run the synthetic checks, use `scripts/desktop/smoke_backend.py`, `scripts/desktop/prepare_qa.py`, `desktop/smoke.cjs`, `desktop/workflow-test.cjs` and `scripts/desktop/verify_return.py`; these never call AI. The remaining numbered sections are **Python package / CLI instructions**. Desktop users do not need to run those installation commands.
+The output is `dist/macos/Food Record-darwin-arm64/Food Record.app`. The build preserves relative backend library links during Electron packaging and checks every symlink in the final app. Broken, cyclic, absolute or out-of-bundle links fail validation. The release ZIP is extracted to a new location and tested with the original build output unavailable before publishing. JavaScript dependencies are pinned in `desktop/package-lock.json`; Python build/PDF dependencies are pinned in the `desktop` extra. The build does not include local studies, `.env`, or `docs`. To run the synthetic checks, use `scripts/desktop/smoke_backend.py`, `scripts/desktop/prepare_qa.py`, `desktop/smoke.cjs`, `desktop/workflow-test.cjs` and `scripts/desktop/verify_return.py`; these never call AI. The remaining numbered sections are **Python package / CLI instructions**. Desktop users do not need to run those installation commands.
 
 ## 1. Install on the study owner's computer
 
