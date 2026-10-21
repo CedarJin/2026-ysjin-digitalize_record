@@ -106,7 +106,12 @@ def project_day(unit_id, sid, day_date, members, pending):
         }
 
         def reference(key):
-            return "intake-day" if key == placement.day_id else rid + "::" + key
+            if key == placement.day_id:
+                return "intake-day"
+            entity_id, separator, field = key.rpartition(".")
+            if separator and entity_id == placement.day_id:
+                return "intake-day." + field
+            return rid + "::" + key
 
         def rewrite(value):
             if isinstance(value, dict):

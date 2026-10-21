@@ -121,9 +121,22 @@ def validate_content(content: RecordContent, snapshot: dict) -> list[Issue]:
         add("subject_conflict", "subject", "The page subject differs from metadata.")
     # Find all evidence, including per-field references.
     payload = content.model_dump(mode="json")
-    item_ids = {item.item_id for item in content.items}
-    event_ids = {event.event_id for event in content.events}
-    day_ids = {day.day_id for day in content.days}
+    entities = {
+        entity[key]: entity
+        for group, key in [("items", "item_id"), ("events", "event_id"), ("days", "day_id")]
+        for entity in payload[group]
+    }
+
+    def valid_inheritance(reference):
+        if reference in entities:
+            return True
+        entity_id, separator, field = reference.rpartition(".")
+        target = entities.get(entity_id, {}).get(field)
+        # AI output may identify the exact source field (e.g. item-1.amount).
+        # Accept only an existing Value field, never arbitrary paths or IDs.
+        return bool(
+            separator and isinstance(target, dict) and "normalized" in target and "evidence" in target
+        )
 
     def walk(value, path):
         if isinstance(value, dict):
@@ -150,9 +163,13 @@ def validate_content(content: RecordContent, snapshot: dict) -> list[Issue]:
                         "Value must match its authoritative metadata field.",
                     )
             if value.get("inherited_from"):
-                # Inheritance uses an entity ID; source is preserved on that entity.
-                if value["inherited_from"] not in item_ids | event_ids | day_ids:
-                    add("invalid_inheritance", path, "Inherited value references an unknown entity.")
+                # Keep both entity-level and explicit field-level provenance.
+                if not valid_inheritance(value["inherited_from"]):
+                    add(
+                        "invalid_inheritance",
+                        path,
+                        "Inherited value references an unknown entity or value field.",
+                    )
                 else:
                     add(
                         "inherited_value",

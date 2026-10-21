@@ -342,3 +342,20 @@ def test_existing_conflict_migrates_once_without_changing_candidate(day_review):
     svc.queue(owner)
     with svc.factory() as s:
         assert s.scalar(select(db.DayPlacement)).revision == revision
+
+
+def test_field_inheritance_survives_day_grouping_and_approval(day_review):
+    svc, owner, reviewer, _, _ = day_review
+    with svc.factory.begin() as s:
+        candidate = s.scalar(select(db.Candidate))
+        raw = copy.deepcopy(candidate.content)
+        raw["items"][0]["unit"] = {"normalized": "cup", "inherited_from": "d0.date"}
+        raw["events"][0]["place"] = {"normalized": "Home", "inherited_from": "i0.description"}
+        candidate.content = RecordContent.model_validate(raw).model_dump(mode="json")
+    rid = svc.queue(owner)[0]["record_id"]
+    data = svc.detail(owner, rid)["content"]
+    assert data["items"][0]["unit"]["inherited_from"] == "intake-day.date"
+    assert data["events"][0]["place"]["inherited_from"] == "R001::i0.description"
+    task = svc.assign(owner, rid, reviewer)
+    finish(svc, reviewer, task)
+    assert svc.approve(owner, rid)

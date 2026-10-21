@@ -493,10 +493,10 @@ class ReviewService:
             ):
                 raise ReviewError("Explain the use or non-use of every attachment page before approval.")
             fresh = validate_content(data, snapshot)
-            if any(i.code in APPROVAL_BLOCKING_CODES for i in fresh):
-                raise ReviewError(
-                    "Correct structural references, missing sources, dates and identity before approval."
-                )
+            blocking = [i for i in fresh if i.code in APPROVAL_BLOCKING_CODES]
+            if blocking:
+                details = "; ".join(f"{i.target}: {i.message}" for i in blocking)
+                raise ReviewError("Correct structural references or source data before approval: " + details)
         return data.model_dump(mode="json")
 
     def save(self, actor_id, task_id, revision, content, reason="Draft saved"):
