@@ -106,7 +106,7 @@ python3 -m venv .venv
 ./scripts/desktop/build.sh
 ```
 
-The output is `dist/macos/Food Record-darwin-arm64/Food Record.app`. JavaScript dependencies are pinned in `desktop/package-lock.json`; Python build/PDF dependencies are pinned in the `desktop` extra. The build does not include local studies, `.env`, or `docs`. To run the synthetic checks, use `scripts/desktop/smoke_backend.py`, `scripts/desktop/prepare_qa.py`, `desktop/smoke.cjs`, `desktop/workflow-test.cjs` and `scripts/desktop/verify_return.py`; these never call AI. The remaining numbered sections are **Python package / CLI instructions**. Desktop users do not need to run those installation commands.
+The output is `dist/macos/Food Record-darwin-arm64/Food Record.app`. The build rewrites in-bundle absolute symlinks to relative paths and stops if a bundled library link is broken or points outside the app. JavaScript dependencies are pinned in `desktop/package-lock.json`; Python build/PDF dependencies are pinned in the `desktop` extra. The build does not include local studies, `.env`, or `docs`. To run the synthetic checks, use `scripts/desktop/smoke_backend.py`, `scripts/desktop/prepare_qa.py`, `desktop/smoke.cjs`, `desktop/workflow-test.cjs` and `scripts/desktop/verify_return.py`; these never call AI. The remaining numbered sections are **Python package / CLI instructions**. Desktop users do not need to run those installation commands.
 
 ## 1. Install on the study owner's computer
 
