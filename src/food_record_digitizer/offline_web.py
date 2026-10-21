@@ -82,7 +82,7 @@ def create_offline_app(reviewer=None, launch_token=None, workspace=None):
 
     @app.get("/static/{name}")
     def asset(name: str):
-        if name not in {"app.js", "style.css"}:
+        if name not in {"app.js", "review_flow.js", "style.css"}:
             raise ReviewError("Not found.", 404)
         return FileResponse(STATIC / name)
 

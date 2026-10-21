@@ -14,7 +14,7 @@ const path=require('node:path');
   console.log('Study opened; no Python/Node/Poppler on PATH');
   const state=await page.evaluate(()=>fetch('/desktop/state').then(r=>r.json()));
   if(state.queue.active||state.queue.queued)throw Error('Unexpected processing');
-  await page.getByRole('link',{name:'Review & collaboration',exact:true}).click();
+  await page.getByRole('link',{name:'Review',exact:true}).click();
   await page.getByRole('heading',{name:'Day review queue',exact:true}).waitFor();
   console.log('Password-free local review loaded');
  }finally{await app.close();}

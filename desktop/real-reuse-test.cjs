@@ -8,7 +8,7 @@ const state=await page.evaluate(()=>fetch('/desktop/state').then(r=>r.json()));
 if(state.records.filter(r=>r.has_candidate).length!==362)throw Error('Candidate reuse count mismatch');
 if(state.queue.active||state.queue.queued)throw Error('Unexpected processing');
 await page.screenshot({path:path.join(root,'work/desktop-real-records.png')});
-await page.locator('#rows').getByRole('link',{name:'Review',exact:true}).first().click();await page.waitForFunction(()=>document.querySelector('#scan')?.naturalWidth>0);
+await page.locator('#rows').getByRole('link',{name:'Preview',exact:true}).first().click();await page.waitForFunction(()=>document.querySelector('#scan')?.naturalWidth>0);
 await page.screenshot({path:path.join(root,'work/desktop-real-review.png')});
 console.log('362 existing candidates reused; real scan rendered; no queued or active API jobs.');
 }finally{await app.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

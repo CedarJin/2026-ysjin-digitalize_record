@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict');
+const flow=require('../../src/food_record_digitizer/static/review_flow.js');
+const user={id:'owner',role:'owner'};
+const row=(id,state='pending_review',status=null)=>({record_id:id,input_version:1,state,has_candidate:true,submitted:status==='submitted'?1:0,tasks:status?[{assignee_id:user.id,status}]:[]});
+const original=[row('a','in_review','in_progress'),row('b'),row('c'),row('d'),row('e')];
+const after=[row('a','pending_review','submitted'),row('b','excluded'),{...row('c'),input_version:2},row('d','pending_review','stale'),row('e')];
+assert.equal(flow.next(original,after,'a',user),'e','Skip excluded, changed and stale days');
+assert.equal(flow.next(original,after.slice(0,4),'a',user),null,'Missing days are not reopened');
+assert.equal(flow.next(original,[row('b','pending_review','submitted')],'a',user),null,'Do not reopen submitted work');
+assert.equal(flow.next(original,[row('b','approved')],'a',user),null,'Do not reopen approved work');
+assert.equal(flow.next(original,[{...row('b'),has_candidate:false}],'a',user),null,'Do not start untranscribed work automatically');
+assert.equal(flow.next(original,[{...row('b'),tasks:[{assignee_id:'other',status:'submitted'}],submitted:1}],'a',user),null,'Do not silently join already-submitted independent work');
+const offline={id:'reviewer',role:'reviewer',offline:true};
+assert.equal(flow.next(original,[{...row('b'),tasks:[{assignee_id:'reviewer',status:'assigned'}]}],'a',offline),'b');
+assert.equal(flow.next(original,[{...row('b'),tasks:[{assignee_id:'other',status:'assigned'}]}],'a',offline),null);
+assert(flow.completed(row('a','in_review','submitted'),user));
+assert.equal(flow.next(original,[row('a'),row('c','in_review','submitted')],'c',user),'a','Wrap within the same fixed queue, without adding unrelated days');
+console.log('Review queue navigation and freshness rules passed.');

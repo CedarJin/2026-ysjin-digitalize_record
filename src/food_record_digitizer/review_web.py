@@ -217,7 +217,7 @@ def create_app(
 
     @app.get("/static/{name}")
     def asset(name: str):
-        if name not in {"app.js", "style.css"}:
+        if name not in {"app.js", "review_flow.js", "style.css"}:
             raise ReviewError("Not found.", 404)
         return FileResponse(STATIC / name)
 
