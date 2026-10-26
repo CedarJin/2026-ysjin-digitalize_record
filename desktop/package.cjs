@@ -15,6 +15,13 @@ packager({
   extendInfo:{LSMinimumSystemVersion:'13.0'},
   ignore:[/\/(smoke|package|.*-test)\.cjs$/],
   overwrite:true, asar:true, prune:true,
+  // Internal testing only: seal the completed bundle and every nested binary.
+  // Ad-hoc signing provides integrity, not Developer ID trust or notarization.
+  osxSign:{
+    identity:'-', identityValidation:false,
+    preAutoEntitlements:false, preEmbedProvisioningProfile:false,
+    optionsForFile:()=>({hardenedRuntime:false,timestamp:'none',entitlements:['com.apple.security.cs.allow-jit']}),
+  },
   extraResource:[path.resolve(__dirname,'THIRD_PARTY_NOTICES.txt')],
   afterCopyExtraResources:[async({buildPath})=>{
     const source=path.join(root,'dist/food-record-backend');
@@ -29,6 +36,10 @@ packager({
       await fs.copyFile(path.join(buildPath,name),path.join(buildPath,'Electron.app/Contents/Resources',name));
   }],
 }).then(paths=>{
-  for(const output of paths)validate(path.join(output,'Food Record.app'));
+  for(const output of paths){
+    const app=path.join(output,'Food Record.app');
+    validate(app);
+    execFileSync('/usr/bin/codesign',['--verify','--deep','--strict','--verbose=2',app],{stdio:'inherit'});
+  }
   console.log(paths);
 }).catch(e=>{console.error(e);process.exit(1);});

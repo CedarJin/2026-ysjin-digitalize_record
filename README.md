@@ -58,19 +58,19 @@ The app starts a private service bound only to the local computer, with a fresh 
 
 ## macOS desktop app — Apple Silicon preview
 
-The desktop app wraps this same Python package. It includes Python and a PDF renderer; end users do **not** need Terminal, Homebrew, Node.js, or a Python installation. This build targets Apple Silicon (including M1) and macOS 13 or newer. It is an internal, unsigned preview, not a signed/notarized public release. Intel Macs are not supported by this build.
+The desktop app wraps this same Python package. It includes Python and a PDF renderer; end users do **not** need Terminal, Homebrew, Node.js, or a Python installation. This build targets Apple Silicon (including M1) and macOS 13 or newer. It is an internal preview with ad-hoc integrity signing, without an Apple Developer ID signature or notarization. Intel Macs are not supported by this build.
 
 ### Install the app
 
-Download the installer from the [v0.6.0 testing pre-release](https://github.com/CedarJin/2026-ysjin-digitalize_record/releases/tag/v0.6.0): choose **Food-Record-0.6.0-macOS-arm64.zip**, not the automatically generated Source code archive. A SHA-256 checksum file is provided alongside it. This is a testing preview; read the release notes for compatibility and pending validation.
+Download the installer from the [v0.6.1 testing pre-release](https://github.com/CedarJin/2026-ysjin-digitalize_record/releases/tag/v0.6.1): choose **Food-Record-0.6.1-macOS-arm64.zip**, not the automatically generated Source code archive. A SHA-256 checksum file is provided alongside it. This is a testing preview; read the release notes for compatibility and pending validation.
 
 1. Unzip the **installer ZIP**.
 2. Drag **Food Record.app** into **Applications** and open it.
-3. This internal build is unsigned and unnotarized. If macOS reports an unidentified developer, use **System Settings → Privacy & Security → Open Anyway** only after confirming the installer came from your trusted study owner. See [Apple's opening-app guidance](https://support.apple.com/en-us/102445). Report other launch errors rather than disabling system-wide protection.
+3. This internal build is ad-hoc signed and unnotarized. If macOS reports an unidentified developer and offers an override, use **System Settings → Privacy & Security → Open Anyway** only after confirming the installer came from your trusted study owner. See [Apple's opening-app guidance](https://support.apple.com/en-us/102445). If macOS says the app is damaged or offers no override, report the message and stop; do not disable system-wide protection. Ad-hoc signing does not guarantee acceptance by Gatekeeper.
 
 ### Start with your own data
 
-The workflow below describes the **0.6.0 internal testing app**.
+The workflow below describes the **0.6.1 internal testing app**.
 
 **A new researcher does not need an existing workspace, database or specially arranged input folder.** Choose **Start a new study** and select a new study folder such as `Documents/My Nutrition Study`. The app creates its internal files. Then drop the folder containing your scans and metadata onto the app, or use **Choose folder** / **Choose files**. Your original files stay in place.
 

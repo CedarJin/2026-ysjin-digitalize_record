@@ -18,6 +18,7 @@ function run(command,args,env=process.env){return new Promise((resolve,reject)=>
  execFileSync('/usr/bin/ditto',['-x','-k',zip,unpack]);
  const bundle=path.join(unpack,'Food Record.app');
  execFileSync(path.join(root,'.venv/bin/python'),[path.join(root,'scripts/desktop/normalize_bundle_symlinks.py'),bundle,'--check-only'],{stdio:'inherit'});
+ execFileSync('/usr/bin/codesign',['--verify','--deep','--strict','--verbose=2',bundle],{stdio:'inherit'});
  const executablePath=path.join(bundle,'Contents/MacOS/Food Record');
  let app;
  try{

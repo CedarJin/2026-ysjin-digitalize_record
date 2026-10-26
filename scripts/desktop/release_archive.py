@@ -14,10 +14,19 @@ from normalize_bundle_symlinks import normalize_bundle_symlinks
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def verify_signature(app: Path):
+    """Fail closed on invalid signatures before upload and after ZIP extraction."""
+    subprocess.run(
+        ["/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)],
+        check=True,
+    )
+
+
 def main():
     version = json.loads((ROOT / "desktop/package.json").read_text())["version"]
     app = ROOT / "dist/macos/Food Record-darwin-arm64/Food Record.app"
     normalize_bundle_symlinks(app, check_only=True)
+    verify_signature(app)
     output = ROOT / f"dist/Food-Record-{version}-macOS-arm64.zip"
     subprocess.run(
         ["/usr/bin/ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(app), str(output)], check=True
@@ -35,6 +44,7 @@ def main():
         subprocess.run(["/usr/bin/ditto", "-x", "-k", str(output), temporary], check=True)
         rewritten, checked = normalize_bundle_symlinks(Path(temporary) / "Food Record.app", check_only=True)
         assert rewritten == 0
+        verify_signature(Path(temporary) / "Food Record.app")
     checksum = hashlib.sha256(output.read_bytes()).hexdigest()
     output.with_suffix(".zip.sha256").write_text(f"{checksum}  {output.name}\n")
     print(f"Validated {checked} extracted links; {output.name}: {checksum}")
