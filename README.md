@@ -62,7 +62,7 @@ The desktop app wraps this same Python package. It includes Python and a PDF ren
 
 ### Install the app
 
-Download the installer from the [v0.6.1 testing pre-release](https://github.com/CedarJin/2026-ysjin-digitalize_record/releases/tag/v0.6.1): choose **Food-Record-0.6.1-macOS-arm64.zip**, not the automatically generated Source code archive. A SHA-256 checksum file is provided alongside it. This is a testing preview; read the release notes for compatibility and pending validation.
+Download the installer from the [v0.7.0 testing pre-release](https://github.com/CedarJin/2026-ysjin-digitalize_record/releases/tag/v0.7.0): choose **Food-Record-0.7.0-macOS-arm64.zip**, not the automatically generated Source code archive. A SHA-256 checksum file is provided alongside it. This is a testing preview; read the release notes for compatibility and pending validation.
 
 1. Unzip the **installer ZIP**.
 2. Drag **Food Record.app** into **Applications** and open it.
@@ -70,7 +70,7 @@ Download the installer from the [v0.6.1 testing pre-release](https://github.com/
 
 ### Start with your own data
 
-The workflow below describes the **0.7.0 development app**. The published 0.6.1 installer does not yet include food-level date editing.
+The workflow below describes the **0.7.0 testing app**, including food-level date editing.
 
 **A new researcher does not need an existing workspace, database or specially arranged input folder.** Choose **Start a new study** and select a new study folder such as `Documents/My Nutrition Study`. The app creates its internal files. Then drop the folder containing your scans and metadata onto the app, or use **Choose folder** / **Choose files**. Your original files stay in place.
 
