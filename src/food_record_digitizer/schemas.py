@@ -110,6 +110,7 @@ class FoodItem(Model):
 class RecordDay(Model):
     day_id: str
     date: Value = Field(default_factory=unknown)
+    date_needs_confirmation: bool = False
 
 
 class EatingEvent(Model):

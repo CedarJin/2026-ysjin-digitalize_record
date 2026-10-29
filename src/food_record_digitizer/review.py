@@ -529,6 +529,12 @@ class ReviewService:
                 p.reviewed and (p.regions or p.classification == "blank") for p in data.pages
             ):
                 raise ReviewError("Confirm every source page and its meaningful regions before submitting.")
+            if any(
+                i.code == "date_needs_confirmation" for i in validate_content(data, self.snapshot(s, record))
+            ):
+                raise ReviewError(
+                    "Date needs confirmation. In Food items, confirm the date or choose Keep Unknown date before submitting."
+                )
             sub = self.ReviewSubmission(task_id=task.id, reviewer_id=actor.id, content=task.draft)
             s.add(sub)
             s.flush()

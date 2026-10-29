@@ -20,7 +20,7 @@ def tables(records):
             "Record ID": rid,
             "Status": r.get("status", "approved"),
             "Participant": r.get("subject_id"),
-            "Metadata date": r.get("date"),
+            "Review group date": r.get("date"),
         }
         result["Records"].append(
             {
@@ -31,6 +31,7 @@ def tables(records):
             }
         )
         events = {e["event_id"]: e for e in content["events"]}
+        days = {d["day_id"]: d for d in content["days"]}
 
         def flatten(obj, entity, kind):
             row = {**base, "Entity ID": entity}
@@ -71,6 +72,23 @@ def tables(records):
         for item in content["items"]:
             row = flatten(item, item["item_id"], "food")
             event = events.get(item["event_id"], {})
+            day = days.get(event.get("day_id"), {})
+            date = day.get("date", {})
+            row["Intake date"] = date.get("normalized")
+            row["Intake date raw"] = date.get("raw")
+            row["Intake date missing reason"] = date.get("missing_reason")
+            row["Date needs confirmation"] = day.get("date_needs_confirmation", False)
+            snapshot = r.get("snapshot", r.get("sources", {}))
+            source_ids = {e["source_record_id"] for e in item.get("evidence", [])}
+            row["Metadata dates"] = "; ".join(
+                sorted(
+                    {
+                        str(snapshot.get("metadata", {}).get(sid, {}).get("date"))
+                        for sid in source_ids
+                        if snapshot.get("metadata", {}).get(sid, {}).get("date")
+                    }
+                )
+            )
             for key in ("time", "meal_label"):
                 value = event.get(key, {})
                 row[key.replace("_", " ").title()] = value.get("normalized")
@@ -110,7 +128,9 @@ def column_meaning(column):
         "Record ID": "Stable source record identifier; use with entity IDs when joining tables.",
         "Status": "ai_draft, manual_draft or approved; drafts are not approved research data.",
         "Participant": "Participant identifier from authoritative metadata.",
-        "Metadata date": "Intake date from metadata; blank means unavailable, not an inferred date.",
+        "Review group date": "Original assignment date; use Intake date for food-level research analysis.",
+        "Intake date": "Effective intake date after review corrections; blank means unknown.",
+        "Metadata dates": "Original source metadata dates, retained separately from corrected intake dates.",
         "Entity ID": "Identifier within this record and entity type.",
         "Event Id": "Join to Events using Record ID and Event Id.",
         "Day Id": "Join to Days using Record ID and Day Id.",

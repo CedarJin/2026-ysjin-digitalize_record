@@ -34,6 +34,7 @@ VALIDATION_CODES = {
     "invalid_metadata_date",
     "date_conflict",
     "invalid_date",
+    "date_needs_confirmation",
     "attachment_metadata_conflict",
     "source_incomplete",
     "no_items",
@@ -51,6 +52,7 @@ APPROVAL_BLOCKING_CODES = {
     "missing_source",
     "unverified_subject",
     "invalid_date",
+    "date_needs_confirmation",
     "unresolved_day_membership",
 }
 
@@ -148,7 +150,7 @@ def validate_content(content: RecordContent, snapshot: dict) -> list[Issue]:
                     "subject_id"
                     if path == "record.subject"
                     else "date"
-                    if path == "record.days[0].date"
+                    if path.startswith("record.days[") and path.endswith("].date")
                     else None
                 )
                 row = snapshot["metadata"].get(ref["record_id"], {})
@@ -197,7 +199,15 @@ def validate_content(content: RecordContent, snapshot: dict) -> list[Issue]:
                 "Metadata date is not an ISO date; preserve its raw value.",
             )
             metadata_date = None
+    used_events = {item.event_id for item in content.items}
+    used_days = {event.day_id for event in content.events if event.event_id in used_events}
     for day in content.days:
+        if day.day_id in used_days and day.date_needs_confirmation:
+            add(
+                "date_needs_confirmation",
+                day.day_id,
+                "Date needs confirmation. Check the scan, or keep Unknown date if it cannot be determined.",
+            )
         if day.date.normalized and metadata_date and day.date.normalized != metadata_date:
             add("date_conflict", day.day_id, "Page date differs from metadata; check multi-day records.")
         if day.date.normalized:

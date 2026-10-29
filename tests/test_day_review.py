@@ -120,20 +120,18 @@ def test_day_grouping_submission_release_and_new_same_day_invalidates(day_review
         assert s.get(db.DayReviewTask, task).status == "stale"
 
 
-def test_metadata_overrides_scan_and_reimport_invalidates_review(day_review, tmp_path):
+def test_multiday_scan_overrides_record_date_and_reimport_invalidates_review(day_review, tmp_path):
     svc, owner, a, b, h = day_review
     add_source(svc.workspace, tmp_path, "R002", dates=["2026-01-01", "2026-01-02"])
     rows = svc.queue(owner)
-    assert len(rows) == 1
-    rid = rows[0]["record_id"]
+    assert len(rows) == 2
+    rid = next(r["record_id"] for r in rows if r["date"] == "2026-01-01")
     detail = svc.detail(owner, rid)
-    assert not detail["snapshot"]["pending_placements"]
-    assert len(detail["content"]["items"]) == 3
-    assert detail["content"]["days"][0]["date"]["normalized"] == "2026-01-01"
-    assert any(i["code"] == "metadata_source_difference" for i in detail["content"]["issues"])
-    p = svc.placements(owner)[0]
-    with pytest.raises(ReviewError, match="metadata"):
-        svc.resolve_placement(owner, p["id"], p["revision"], "S1", "2026-01-03", "Scan date")
+    assert len(detail["content"]["items"]) == 2
+    assert set(detail["snapshot"]["documents"]) == {"R001", "R002"}
+    second = svc.detail(owner, next(r["record_id"] for r in rows if r["date"] == "2026-01-02"))
+    assert len(second["content"]["items"]) == 1
+    assert "R002" in second["snapshot"]["documents"]
     task = svc.assign(owner, rid, a)
     finish(svc, a, task)
     svc.approve(owner, rid)
@@ -247,8 +245,12 @@ def test_same_day_late_ai_draft_invalidates_and_unit_identity_is_fixed(day_revie
     d = svc.detail(a, rid)
     changed = copy.deepcopy(d["content"])
     changed["days"][0]["date"]["normalized"] = "2026-01-02"
-    with pytest.raises(ReviewError, match="grouping"):
-        svc.save(a, task, d["task"]["revision"], changed)
+    changed["days"][0]["date"].pop("metadata_reference", None)
+    changed["days"][0]["date"]["evidence"] = copy.deepcopy(changed["items"][0]["evidence"])
+    assert (
+        svc.save(a, task, d["task"]["revision"], changed)["content"]["days"][0]["date"]["normalized"]
+        == "2026-01-02"
+    )
     add_source(svc.workspace, tmp_path, dates=["2026-01-01"])
     with pytest.raises(ReviewError, match="editable"):
         svc.save(a, task, d["task"]["revision"], d["content"])
@@ -337,7 +339,7 @@ def test_existing_conflict_migrates_once_without_changing_candidate(day_review):
     with svc.factory() as s:
         p = s.scalar(select(db.DayPlacement))
         revision = p.revision
-        assert p.status == "metadata_assigned"
+        assert p.status == "date_proposed"
         assert s.get(db.Candidate, candidate_id).content == original
     svc.queue(owner)
     with svc.factory() as s:

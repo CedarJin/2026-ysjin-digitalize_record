@@ -183,7 +183,7 @@ def test_metadata_edit_keeps_transcription_invalidates_review_without_api(ws, tm
         assert (
             len(rows) == 1
             and rows[0]["subject_id"] == "P2"
-            and rows[0]["date"] is None
+            and rows[0]["date"] == "2026-01-01"
             and rows[0]["state"] != "approved"
         )
         with ws.factory() as s:

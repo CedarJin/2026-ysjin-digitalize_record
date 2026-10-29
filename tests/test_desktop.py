@@ -397,7 +397,7 @@ def test_import_preview_lists_affected_days_without_changing_study(ws, tmp_path)
     from food_record_digitizer.desktop_server import identity
 
     add_source(ws, tmp_path)
-    add_source(ws, tmp_path, rid="R002", sid="NEW", date="2026-10-20")
+    add_source(ws, tmp_path, rid="R002", sid="NEW", date="2026-01-01")
     service = DayReviewService(ws)
     owner = identity(ws)["id"]
     service.queue(owner)
@@ -406,7 +406,7 @@ def test_import_preview_lists_affected_days_without_changing_study(ws, tmp_path)
     directory = tmp_path / "preview-input"
     directory.mkdir()
     (directory / "upload.json").write_text('{"files": []}')
-    # Metadata alone is enough to regroup an existing source.
+    # Metadata participant correction regroups a source with the same explicit scan date.
     result = preview_plan(
         ws, directory, [], [{"record_id": "R001", "subject_id": "NEW", "date": "2026-10-20"}]
     )

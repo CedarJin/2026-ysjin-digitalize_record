@@ -1,0 +1,12 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('src/food_record_digitizer/static/app.js','utf8');
+const S={content:{days:[{day_id:'d',date:{normalized:'2026-01-01',evidence:[]},date_needs_confirmation:true}],events:[{event_id:'e',day_id:'d',time:{normalized:'08:00'},meal_label:{normalized:null}}],items:[{item_id:'a',event_id:'e',evidence:[{source_record_id:'R1',page_number:1,region:'row 1'}]},{item_id:'b',event_id:'e',evidence:[{source_record_id:'R1',page_number:1,region:'row 2'}]}]}};
+let n=0;const ctx=vm.createContext({S,clone:structuredClone,uid:()=>`n${++n}`,unknown:()=>({normalized:null,raw:null,missing_reason:'not_recorded',evidence:[],inherited_from:null})});
+vm.runInContext(source.slice(source.indexOf('function itemTiming('),source.indexOf('\nfunction at(')),ctx);
+ctx.applyItemDates([0],'2026-01-02');
+assert.equal(ctx.itemDay(0).date.normalized,'2026-01-02');assert.equal(ctx.itemDay(1).date.normalized,'2026-01-01');assert.equal(ctx.itemDay(1).date_needs_confirmation,true);
+assert.equal(ctx.itemTiming(0).time.normalized,'08:00');
+ctx.applyItemDates([0,1],'');assert.equal(ctx.itemDay(0).day_id,ctx.itemDay(1).day_id);assert.equal(ctx.itemDay(0).date.normalized,null);assert.equal(ctx.itemDay(0).date_needs_confirmation,false);
+assert.throws(()=>ctx.applyItemDates([0],'2026-02-30'));assert.throws(()=>ctx.applyItemDates([],'2026-01-01'));
+assert.equal(S.content.days[0].date.normalized,'2026-01-01','Original date evidence retained');
+console.log('Individual and batch dates, explicit unknown, original evidence and timing isolation passed');

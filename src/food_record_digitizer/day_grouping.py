@@ -32,6 +32,16 @@ def proposal(record, candidate, day, snapshot):
     ms, md = subject(meta.get("subject_id")), iso_date(meta.get("date"))
     cs = subject(candidate.content.get("subject", {}).get("normalized")) if candidate else None
     cd = iso_date(day.get("date", {}).get("normalized"))
+    source_value = day.get("date", {})
+    uncertain = bool(day.get("date_needs_confirmation")) or source_value.get("missing_reason") in {
+        "ambiguous",
+        "illegible",
+    }
+    relative = bool(source_value.get("raw")) and not cd
+    # A record-level metadata date is only a fallback for one undated intake day.
+    multiple = snapshot.get("day_count", 1) > 1
+    effective = cd or (md if not multiple and not uncertain and not relative else None)
+    needs_date = uncertain or relative or bool(cd and md and cd != md and not multiple)
     problems = []
     if not ms:
         problems.append("Metadata participant is missing.")
@@ -42,9 +52,10 @@ def proposal(record, candidate, day, snapshot):
             "metadata_date": md,
             "source_date": cd,
             "problems": problems,
+            "date_needs_confirmation": needs_date,
         },
         ms or cs,
-        md,
+        effective,
     )
 
 
@@ -150,9 +161,14 @@ def project_day(unit_id, sid, day_date, members, pending):
                 issue(
                     "metadata_source_difference",
                     rid + "::" + placement.day_id,
-                    "The transcription differs from metadata. Metadata determines the participant and intake date; check the food entries against the scan.",
+                    "The transcription differs from metadata. Metadata supplies the participant and a default date. Confirm the intake date against the scan.",
                 )
             )
+        if placement.proposed.get("date_needs_confirmation") and placement.status != "owner_confirmed":
+            content["days"][0]["date_needs_confirmation"] = True
+            if not content["days"][0]["date"].get("raw"):
+                original_day = next((d for d in raw["days"] if d["day_id"] == placement.day_id), {})
+                content["days"][0]["date"]["raw"] = original_day.get("date", {}).get("raw")
         for e in raw["events"]:
             if e["event_id"] in event_ids:
                 original = e["event_id"]
@@ -337,17 +353,19 @@ def sync_day_units(service):
                     )
                     s.add(p)
                     s.flush()
-                # Reconcile existing automatic placements when adopting metadata authority.
+                # Reconcile automatic date proposals; explicit human grouping stays authoritative.
                 # Explicit additional days are retained as documented owner exceptions.
-                if not p.day_id.startswith("manual:"):
+                if not p.day_id.startswith("manual:") and p.status != "owner_confirmed":
                     proposed, sid, day_date = proposal(record, candidate, day, source)
                     if not proposed["problems"]:
-                        desired = (sid, day_date, "metadata_assigned")
-                        if (p.subject_id, p.date, p.status) != desired:
+                        desired = (sid, day_date, "date_proposed")
+                        if (p.subject_id, p.date) != (sid, day_date) or bool(
+                            p.proposed.get("date_needs_confirmation")
+                        ) != bool(proposed["date_needs_confirmation"]):
                             before = {"subject_id": p.subject_id, "date": p.date, "status": p.status}
                             p.subject_id, p.date, p.status = desired
                             p.proposed = proposed
-                            p.reason = "Participant and intake date taken from authoritative metadata."
+                            p.reason = "Participant from metadata; intake date from source when explicit, otherwise a metadata default."
                             p.confirmed_by = None
                             service.audit(
                                 s,
@@ -391,7 +409,11 @@ def sync_day_units(service):
             unit = s.get(DayReviewUnit, unit_id)
             if not unit:
                 unit = DayReviewUnit(
-                    id=unit_id, project_id=service.project_id, subject_id=sid, date=stored_date or "unknown:" + unit_id, input_version=0
+                    id=unit_id,
+                    project_id=service.project_id,
+                    subject_id=sid,
+                    date=stored_date or "unknown:" + unit_id,
+                    input_version=0,
                 )
                 s.add(unit)
                 s.flush()

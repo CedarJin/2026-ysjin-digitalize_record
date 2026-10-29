@@ -70,7 +70,7 @@ Download the installer from the [v0.6.1 testing pre-release](https://github.com/
 
 ### Start with your own data
 
-The workflow below describes the **0.6.1 internal testing app**.
+The workflow below describes the **0.7.0 development app**. The published 0.6.1 installer does not yet include food-level date editing.
 
 **A new researcher does not need an existing workspace, database or specially arranged input folder.** Choose **Start a new study** and select a new study folder such as `Documents/My Nutrition Study`. The app creates its internal files. Then drop the folder containing your scans and metadata onto the app, or use **Choose folder** / **Choose files**. Your original files stay in place.
 
@@ -195,7 +195,11 @@ R0002,P002,hab,,baseline,
 
 Keep identifiers as text, including leading zeros. XLSX uses the first worksheet; CSV uses UTF-8. JSON accepts a single object or a list of objects. Duplicate IDs, unexpected columns, and malformed rows are rejected rather than silently discarded. An attachment does not require its own metadata row; if supplied, its metadata is retained.
 
-**Participant and intake date follow metadata.** Records for the same participant and known date are reviewed together. If the date is absent or invalid, it remains unknown: the page shows **Date unknown**, and the structured date is `null`. You do not have to invent or confirm a date. Undated source days remain separate review units so unrelated records are not merged. Missing participant identifiers still need attention.
+**Participant follows metadata; intake dates are proposed from the scan.** Explicit dates on different pages are grouped together, while different dates on one page remain separate. A single undated source day can use its metadata date as a default. Relative, conflicting or illegible dates show **Date needs confirmation**. Entirely absent dates remain **Unknown date** (`null`), and undated source days are not merged across records.
+
+In **Food items**, edit **Date**, **Time** and **Label** independently. Select multiple items to apply a date together, or choose **Keep Unknown date**. Confirm uncertain dates against the scan; do not invent dates that cannot be determined. Page checks cover the items in the current review, not every day printed on the scan. Source-page buttons group the current review’s food evidence by date.
+
+Date corrections stay with the existing assignment so online and offline review history remains intact; they do not silently move food into another reviewer’s task. Use **Intake date** (Excel) or `intake_date` (CSV) for analysis and grouping across returned reviews. **Review group date** records the original assignment date. Original metadata and AI drafts are retained. Both the study owner and offline reviewer need version 0.7.0 to edit and return dates; older packages can be opened in the new app. New source-date grouping can supersede affected old assignments while preserving their saved history.
 
 Metadata-only records with no PDFs remain in the import report but do not appear in the review queue or review packages. If a record has a PDF but a specifically listed attachment is missing, that missing evidence still needs attention.
 

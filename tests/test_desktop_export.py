@@ -57,7 +57,7 @@ def test_export_json_excel_csv_and_dictionary_agree():
                 item["description"]["normalized"] for item in record["content"]["items"]
             ]
             assert all(
-                row["Participant"] == record["subject_id"] and row["Metadata date"] == record["date"]
+                row["Participant"] == record["subject_id"] and row["Review group date"] == record["date"]
                 for row in actual
             )
             assert all(

@@ -96,20 +96,15 @@ class DayReviewService(ReviewService):
 
     def checked(self, content, record, snapshot, baseline, final=False):
         days = content.get("days", [])
-        if len(days) != 1 or days[0]["day_id"] != "intake-day":
-            raise ReviewError(
-                "A day review must contain exactly one intake day. Correct source grouping to move or split a day."
-            )
-        day_date = days[0]["date"].get("normalized")
+        if not days:
+            raise ReviewError("At least one intake day is required; an unknown date may be blank.")
         sid = content.get("subject", {}).get("normalized")
-        if (day_date is not None and day_date != iso_date(record.date)) or (
-            sid is not None and sid != record.subject_id
-        ):
-            raise ReviewError(
-                "Subject and date must match this group. Ask the owner to correct source grouping first."
-            )
-        if final and (day_date != iso_date(record.date) or sid != record.subject_id):
-            raise ReviewError("Confirm the grouped subject and date with source evidence before approval.")
+        if sid is not None and sid != record.subject_id:
+            raise ReviewError("Participant must match this review. Ask the owner to correct metadata.")
+        if final and sid != record.subject_id:
+            raise ReviewError("Confirm the participant before approval.")
+        # Review assignments remain stable, including offline packages. Per-food
+        # date corrections follow event.day_id and are exported as effective dates.
         return super().checked(content, record, snapshot, baseline, final)
 
     def queue(self, actor_id):
@@ -241,12 +236,8 @@ class DayReviewService(ReviewService):
                 raise ReviewError("Source day changed. Reload before confirming its grouping.", 409)
             if not p.day_id.startswith("manual:"):
                 meta = current_snapshot(s, r)["metadata"].get(r.record_id, {})
-                if (subject(meta.get("subject_id")) and sid != subject(meta.get("subject_id"))) or (
-                    iso_date(meta.get("date")) and day_date != iso_date(meta.get("date"))
-                ):
-                    raise ReviewError(
-                        "Participant and date must follow metadata. Correct and re-import metadata first."
-                    )
+                if subject(meta.get("subject_id")) and sid != subject(meta.get("subject_id")):
+                    raise ReviewError("Participant must follow metadata. Correct metadata first.")
             before = {"subject_id": p.subject_id, "date": p.date}
             p.subject_id, p.date, p.reason = sid, day_date, reason.strip()
             p.status, p.confirmed_by = "owner_confirmed", actor.id

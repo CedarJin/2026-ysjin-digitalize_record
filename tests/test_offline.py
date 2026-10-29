@@ -273,29 +273,39 @@ def test_unknown_dates_are_separate_exportable_and_approvable(day_review, tmp_pa
     from food_record_digitizer.offline_reviewer import OfflineReviewer
 
     svc, owner, a, b, h = day_review
-    for rid in ['R002', 'R003']:
-        add_source(svc.workspace, tmp_path, rid, date=None, dates=['2026-01-01'])
+    for rid in ["R002", "R003"]:
+        add_source(svc.workspace, tmp_path, rid, date=None, dates=["2026-01-01"])
+        with svc.factory.begin() as s:
+            record = s.scalar(select(db.Record).where(db.Record.record_id == rid))
+            candidate = s.scalar(select(db.Candidate).where(db.Candidate.record_pk == record.id))
+            content = copy.deepcopy(candidate.content)
+            content["days"][0]["date"] = {
+                "normalized": None,
+                "missing_reason": "not_recorded",
+                "evidence": [],
+            }
+            candidate.content = content
     rows = svc.queue(owner)
-    unknown = [r for r in rows if r['date'] is None]
+    unknown = [r for r in rows if r["date"] is None]
     assert len(unknown) == 2
-    assert all(len(r['source_record_ids']) == 1 for r in unknown)
-    assert not any(p['status'] == 'needs_confirmation' for p in svc.placements(owner))
+    assert all(len(r["source_record_ids"]) == 1 for r in unknown)
+    assert not any(p["status"] == "needs_confirmation" for p in svc.placements(owner))
     manager = OfflineManager(svc.workspace)
-    exported = manager.export(owner, a, [r['record_id'] for r in unknown])[0]
-    package = Path(exported['path']).read_bytes()
-    local = OfflineReviewer(tmp_path / 'undated-review', package)
+    exported = manager.export(owner, a, [r["record_id"] for r in unknown])[0]
+    package = Path(exported["path"]).read_bytes()
+    local = OfflineReviewer(tmp_path / "undated-review", package)
     assert local
     returned = result_for(exported)
-    assert all(u['content']['days'][0]['date']['normalized'] is None for u in returned['units'])
+    assert all(u["content"]["days"][0]["date"]["normalized"] is None for u in returned["units"])
     receipt = manager.import_result(owner, pack(returned, []))
-    assert all(t['status'] == 'accepted' for t in receipt['tasks'])
+    assert all(t["status"] == "accepted" for t in receipt["tasks"])
     for row in unknown:
-        svc.approve(owner, row['record_id'])
+        svc.approve(owner, row["record_id"])
 
 
 def test_metadata_only_record_not_in_review_queue(day_review):
     svc, owner, a, b, h = day_review
     with svc.factory.begin() as s:
-        s.add(db.Record(project_id=svc.project_id, record_id='R999', state='missing_source'))
+        s.add(db.Record(project_id=svc.project_id, record_id="R999", state="missing_source"))
     assert len(svc.queue(owner)) == 1
-    assert all(p['record_id'] != 'R999' for p in svc.placements(owner))
+    assert all(p["record_id"] != "R999" for p in svc.placements(owner))

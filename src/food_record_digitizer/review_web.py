@@ -56,6 +56,25 @@ def release_zip(release):
             writer.writerow(clean)
         entries[name] = stream.getvalue().encode()
 
+    def intake_fields(record, item, kind):
+        if kind not in {"items", "events"}:
+            return {}
+        content = record["content"]
+        event = (
+            next((e for e in content["events"] if e["event_id"] == item.get("event_id")), {})
+            if kind == "items"
+            else item
+        )
+        day = next((d for d in content["days"] if d["day_id"] == event.get("day_id")), {})
+        value = day.get("date", {})
+        return {
+            "review_group_date": record.get("date"),
+            "date": value.get("normalized"),
+            "intake_date": value.get("normalized"),
+            "date_missing_reason": value.get("missing_reason"),
+            "date_needs_confirmation": day.get("date_needs_confirmation", False),
+        }
+
     for key, filename, idfield in [
         ("days", "record_days.csv", "day_id"),
         ("events", "eating_events.csv", "event_id"),
@@ -71,6 +90,7 @@ def release_zip(release):
                     else {}
                 ),
                 **item,
+                **intake_fields(record, item, key),
             }
             for record in payload["records"]
             for item in record["content"][key]

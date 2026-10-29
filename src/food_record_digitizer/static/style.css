@@ -72,3 +72,15 @@ dialog{border-radius:5px;box-shadow:0 10px 40px #26313d20}dialog::backdrop{backg
 
 @media(min-width:900px){.review-workspace{min-height:0}.source-pane,.editor-pane{min-height:0}}
 .desktop-dragging::after{content:'Drop a review ZIP or records folder';position:fixed;inset:12px;z-index:1000;display:grid;place-content:center;border:3px dashed #285c65;border-radius:8px;background:#f2f7f4ed;font-size:24px;pointer-events:none}#desktop-drop-status{position:fixed;left:20px;right:20px;bottom:20px;z-index:2000;background:#fff5ee;color:#6f3528;border:1px solid #b86f51;padding:16px;box-shadow:0 3px 14px #0002}#desktop-drop-status button{margin-left:16px}
+
+.date-toolbar {display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 0;border-block:1px solid var(--border,#d8dfe5);margin:12px 0;}
+.date-toolbar label {display:flex;align-items:center;gap:6px;}
+.date-toolbar input[type=date] {width:160px;}
+.date-context {padding:7px 0;font-size:14px;}
+.date-context span {color:#647080;margin-left:8px;}
+.item summary input[type=checkbox] {flex:none;width:18px;height:18px;}
+.date-toolbar label {flex-direction:row;font-weight:400;margin:0;}
+.date-toolbar input[type=checkbox] {width:18px;height:18px;margin:0;}
+.date-time-label {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.date-time-label input {min-width:0;width:100%;}
+@media(max-width:1000px){.date-time-label {grid-template-columns:1fr;}}
