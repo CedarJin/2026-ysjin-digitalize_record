@@ -249,14 +249,22 @@ def study_app(workspace, capability):
 
     @app.post("/desktop/process/preview")
     async def preview(request: Request):
-        return queue.preview((await request.json())["ids"])
+        body = await request.json()
+        return queue.preview(body["ids"], body.get("force") is True)
 
     @app.post("/desktop/process/start")
     async def process(request: Request):
         body = await request.json()
         if body.get("confirmed") is not True:
             raise InputError("Confirm the API processing scope and fees first.")
-        return queue.enqueue(body["ids"], settings(), body["versions"], body.get("retry_unknown", False))
+        return queue.enqueue(
+            body["ids"],
+            settings(),
+            body["versions"],
+            body.get("retry_unknown", False),
+            force=body.get("force") is True,
+            processing_tokens=body.get("processing_tokens"),
+        )
 
     @app.post("/desktop/process/pause")
     def pause():

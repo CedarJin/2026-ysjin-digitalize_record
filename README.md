@@ -70,7 +70,7 @@ Download the installer from the [v0.7.0 testing pre-release](https://github.com/
 
 ### Start with your own data
 
-The workflow below describes the **0.8.0 development app**, including recipes and simplified research CSV exports. The published 0.7.0 installer does not include these new features.
+The workflow below describes the **0.8.1 development app**, including recipes and simplified research CSV exports. The published 0.7.0 installer does not include these new features.
 
 **A new researcher does not need an existing workspace, database or specially arranged input folder.** Choose **Start a new study** and select a new study folder such as `Documents/My Nutrition Study`. The app creates its internal files. Then drop the folder containing your scans and metadata onto the app, or use **Choose folder** / **Choose files**. Your original files stay in place.
 
@@ -494,3 +494,7 @@ The default approved download is **food_records.csv**, with these columns:
 `Study ID, Participant ID, Date, Time, Meal label, Food, Description, Amount, Unit, Recipe, Preparation method, Place, Brand, Notes, Source record`
 
 **Study ID** is the workspace's stable project identifier, separate from the participant identifier. **Date** is the food's reviewed intake date. Recipe cells list recorded ingredients, quantities, quantity basis and yield. Unknown values remain blank. CSV is UTF-8 with BOM for Excel, and formula-like text is escaped. The detailed archive retains full nested data, evidence and internal identifiers. Existing frozen releases stay unchanged; reopen, correct, resubmit and approve before creating a new release containing recipe corrections. Both owners and offline reviewers must use **0.8.0 or later** for recipe edits and returned results.
+
+### Re-process an existing result (0.8.1)
+
+In **Records**, click **Re-process anyway** beside an existing draft. For a batch, select records, choose **Process selected**, then **Re-process anyway** in the preview. Confirm the scope and API charges. This bypasses existing AI results and the extraction cache. A successful request creates a new baseline and affected reviews require another review; old drafts, saved review history and frozen releases remain available. A failed request retains the old draft. An uncertain previous API outcome requires explicit retry confirmation. Opening the preview alone never sends scans to OpenAI.

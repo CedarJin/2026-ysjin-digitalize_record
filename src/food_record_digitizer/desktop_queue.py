@@ -7,6 +7,7 @@ import sqlite3
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
 
 from sqlalchemy import select
 
@@ -55,6 +56,8 @@ class DesktopQueue:
             )
             if "run_id" not in {row[1] for row in c.execute("PRAGMA table_info(jobs)")}:
                 c.execute("ALTER TABLE jobs ADD COLUMN run_id TEXT")
+            if "dispatch_id" not in {row[1] for row in c.execute("PRAGMA table_info(jobs)")}:
+                c.execute("ALTER TABLE jobs ADD COLUMN dispatch_id TEXT")
             c.execute(
                 "UPDATE jobs SET state='needs_attention', error='Interrupted; remote outcome unknown. Explicit retry may incur another charge.' WHERE state='processing'"
             )
@@ -103,7 +106,7 @@ class DesktopQueue:
                     "processing"
                     if r.record_id in self.active
                     else job["state"]
-                    if manual and job.get("state") in {"queued", "processing", "failed", "needs_attention"}
+                    if job.get("state") in {"queued", "processing", "failed", "needs_attention"}
                     else "manual_draft"
                     if manual
                     else "draft_ready"
@@ -125,6 +128,7 @@ class DesktopQueue:
                         manual_draft=manual,
                         food_items=len(candidate.content.get("items", [])) if candidate else 0,
                         candidate_id=candidate.id if candidate else None,
+                        processing_token=job.get("dispatch_id") or (run.id if run else None),
                         run_id=job.get("run_id") or (run.id if run else None),
                         seconds=job.get("seconds") or (run.elapsed_seconds if run else None),
                         error=job.get("error") or (run.error_code if run else None),
@@ -135,21 +139,24 @@ class DesktopQueue:
                 )
         return rows
 
-    def preview(self, ids):
+    def preview(self, ids, force=False):
         ids = set(ids)
         rows = [r for r in self.records() if r["record_id"] in ids]
         if len(rows) != len(ids):
             raise InputError("Some records no longer exist. Refresh the list.")
-        reusable = [r for r in rows if r["has_ai_candidate"]]
+        reusable = [r for r in rows if r["has_ai_candidate"] and not force]
         eligible = [
             r
             for r in rows
-            if not r["has_ai_candidate"]
+            if (force or not r["has_ai_candidate"])
             and r["state"]
             not in {"missing_source", "blocked", "exclusion_pending", "excluded", "queued", "processing"}
         ]
         return dict(
             records=rows,
+            force=force,
+            reprocess=sum(r["has_ai_candidate"] for r in eligible),
+            processing_tokens={r["record_id"]: [r["candidate_id"], r["processing_token"]] for r in rows},
             reuse=len(reusable),
             manual_drafts=sum(r["manual_draft"] for r in eligible),
             requests=len(eligible),
@@ -159,9 +166,11 @@ class DesktopQueue:
             versions={r["record_id"]: r["version"] for r in rows},
         )
 
-    def enqueue(self, ids, config, versions, retry_unknown=False):
+    def enqueue(self, ids, config, versions, retry_unknown=False, force=False, processing_tokens=None):
         with self.lock:
-            preview = self.preview(ids)
+            preview = self.preview(ids, force)
+            if force and processing_tokens != preview["processing_tokens"]:
+                raise InputError("Processing results changed. Preview re-processing again before starting.")
             if versions != preview["versions"]:
                 raise InputError("Sources changed. Preview the processing scope again.")
             if preview["unknown"] and not retry_unknown:
@@ -171,7 +180,7 @@ class DesktopQueue:
             for row in preview["records"]:
                 if (
                     row["record_id"] in self.active
-                    or row["has_ai_candidate"]
+                    or (row["has_ai_candidate"] and not force)
                     or row["state"]
                     in {
                         "missing_source",
@@ -196,8 +205,13 @@ class DesktopQueue:
                         recover_run(self.workspace, active)
                 with self.connection() as c:
                     c.execute(
-                        "INSERT OR REPLACE INTO jobs (record_id,version,state,config) VALUES (?,?, 'queued', ?)",
-                        (row["record_id"], row["version"], json.dumps(config)),
+                        "INSERT OR REPLACE INTO jobs (record_id,version,state,config,dispatch_id) VALUES (?,?, 'queued', ?, ?)",
+                        (
+                            row["record_id"],
+                            row["version"],
+                            json.dumps({**config, "_force": force, "_candidate_id": row["candidate_id"]}),
+                            uuid4().hex,
+                        ),
                     )
             with self.connection() as connection:
                 self.update_queued_endpoint(connection, config.get("base_url", DEFAULTS["base_url"]))
@@ -248,10 +262,14 @@ class DesktopQueue:
             row = next(r for r in self.records() if r["record_id"] == rid)
             if row["version"] != version:
                 raise InputError("Sources changed before processing. Select this record again.")
-            if row["has_ai_candidate"]:
+            job_config = json.loads(encoded)
+            force = job_config.get("_force", False)
+            if force and row["candidate_id"] != job_config.get("_candidate_id"):
+                raise InputError("The draft changed before re-processing. Preview this record again.")
+            if row["has_ai_candidate"] and not force:
                 state = "succeeded"
             else:
-                config = json.loads(encoded)
+                config = {k: v for k, v in job_config.items() if not k.startswith("_")}
                 provider = self.provider_factory(config)
 
                 def remember_run(run_id):
@@ -269,6 +287,7 @@ class DesktopQueue:
                     dpi=config["dpi"],
                     max_pages=config["max_pages"],
                     on_claim=remember_run,
+                    force=force,
                 )
                 error = result.get("error")
                 state = "succeeded" if result["status"] in {"succeeded", "cached"} else "failed"
