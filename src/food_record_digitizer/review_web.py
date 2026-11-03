@@ -25,6 +25,7 @@ from .day_review import DayReviewService
 from .db import Audit, Batch, ReviewRelease, now
 from .imaging import render_pages
 from .ingest import InputError, ingest_batch, inspect_inputs, read_metadata
+from .research_export import research_csv
 from .review import ReviewError, future
 from .schemas import RecordContent
 
@@ -34,6 +35,7 @@ STATIC = Path(__file__).parent / "static"
 def release_zip(release):
     payload = release.payload
     entries = {
+        "food_records.csv": research_csv(payload["records"], payload.get("study_id", release.project_id)),
         "records.json": json.dumps(payload["records"], ensure_ascii=False, indent=2).encode(),
         "processing_report.json": json.dumps(payload["processing_report"], indent=2).encode(),
     }
@@ -731,12 +733,20 @@ def create_app(
         return {"id": service.release(who["id"], body["record_ids"])}
 
     @app.get("/api/releases/{release_id}/download")
-    def download(request: Request, release_id: str):
+    def download(request: Request, release_id: str, format: str = "archive"):
         user(request, True)
         with service.factory() as s:
             release = s.get(ReviewRelease, release_id)
             if not release or release.project_id != service.project_id:
                 raise ReviewError("Release not found.", 404)
+            if format == "csv":
+                return Response(
+                    research_csv(
+                        release.payload["records"], release.payload.get("study_id", release.project_id)
+                    ),
+                    media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="food_records.csv"'},
+                )
             return Response(
                 release_zip(release),
                 media_type="application/zip",

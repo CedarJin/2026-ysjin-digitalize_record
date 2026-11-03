@@ -84,3 +84,5 @@ dialog{border-radius:5px;box-shadow:0 10px 40px #26313d20}dialog::backdrop{backg
 .date-time-label {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
 .date-time-label input {min-width:0;width:100%;}
 @media(max-width:1000px){.date-time-label {grid-template-columns:1fr;}}
+
+.recipe-panel{margin:18px 0;padding:16px;border:1px solid var(--line,#d9e0e5);border-radius:4px;background:#fafbfc}.recipe-panel>summary{font-weight:600;cursor:pointer}.ingredient{margin:14px 0;padding:14px;border-left:3px solid #bac9d2;background:white}.ingredient h4{margin:0 0 12px}.ingredient .toolbar{margin-top:12px}

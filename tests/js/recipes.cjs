@@ -1,0 +1,15 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('src/food_record_digitizer/static/app.js','utf8');
+const unknown=()=>({normalized:null,raw:null,missing_reason:'not_recorded',evidence:[]});
+const val=normalized=>({...unknown(),normalized,missing_reason:null});
+const food=(id,name,amount)=>({item_id:id,event_id:'e',description:val(name),amount:val(amount),unit:val('g'),evidence:[{region:id}],quantity:200,quantity_max:null,notes:''});
+const S={content:{events:[{event_id:'e'}],items:[food('bread','Bread','1'),food('flour','Flour','200'),food('egg','Egg','50')]},dateSelected:new Set(['flour','egg'])};
+const ctx=vm.createContext({S,clone:structuredClone,unknown});
+vm.runInContext(source.slice(source.indexOf('function foodName('),source.indexOf('\nfunction at(')),ctx);
+ctx.makeIngredients('bread',['flour','egg'],'whole_recipe');
+assert.equal(S.content.items.length,1);assert.equal(S.content.items[0].amount.normalized,'1');assert.equal(S.content.items[0].ingredients[0].amount.normalized,'200');assert.equal(S.content.items[0].ingredients[0].evidence[0].region,'flour');
+ctx.separateIngredient(0,0);
+assert.equal(S.content.items.length,2);assert.equal(S.content.items[1].amount.normalized,null);assert.equal(S.content.items[1].quantity,null);assert.equal(S.content.items[1].ingredient_relationship_needs_confirmation,true);assert.match(S.content.items[1].notes,/200 g/);
+assert.equal(S.content.items[1].item_id,'flour');assert.equal(S.content.items[1].event_id,'e');
+assert.throws(()=>ctx.makeIngredients('flour',['bread'],'unknown'),/already has a recipe/);
+console.log('Recipe moves retain evidence and portions; separation never converts whole-recipe quantities to intake');

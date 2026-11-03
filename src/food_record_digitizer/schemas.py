@@ -83,9 +83,9 @@ def unknown() -> Value:
     return Value(missing_reason="not_recorded")
 
 
-class FoodItem(Model):
+class FoodFields(Model):
     item_id: str = Field(min_length=1)
-    event_id: str
+    food_name: Value = Field(default_factory=unknown)
     description: Value = Field(default_factory=unknown)
     amount: Value = Field(default_factory=unknown)
     unit: Value = Field(default_factory=unknown)
@@ -105,6 +105,19 @@ class FoodItem(Model):
         if self.quantity_max is not None and (self.quantity is None or self.quantity_max < self.quantity):
             raise ValueError("invalid quantity range")
         return self
+
+
+class Ingredient(FoodFields):
+    original_event_id: str | None = None
+
+
+class FoodItem(FoodFields):
+    event_id: str
+    recipe: Value = Field(default_factory=unknown)
+    recipe_yield: Value = Field(default_factory=unknown)
+    ingredient_basis: Literal["whole_recipe", "consumed_portion", "unknown"] = "unknown"
+    ingredients: list[Ingredient] = Field(default_factory=list)
+    ingredient_relationship_needs_confirmation: bool = False
 
 
 class RecordDay(Model):
@@ -155,7 +168,10 @@ class RecordContent(Model):
         for name, values in [
             ("days", [v.day_id for v in self.days]),
             ("events", [v.event_id for v in self.events]),
-            ("items", [v.item_id for v in self.items]),
+            (
+                "items and ingredients",
+                [v.item_id for v in self.items] + [g.item_id for v in self.items for g in v.ingredients],
+            ),
             ("pages", [(v.source_record_id, v.page_number) for v in self.pages]),
         ]:
             if len(values) != len(set(values)):

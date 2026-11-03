@@ -35,6 +35,7 @@ VALIDATION_CODES = {
     "date_conflict",
     "invalid_date",
     "date_needs_confirmation",
+    "ingredient_relationship_needs_confirmation",
     "attachment_metadata_conflict",
     "source_incomplete",
     "no_items",
@@ -53,6 +54,7 @@ APPROVAL_BLOCKING_CODES = {
     "unverified_subject",
     "invalid_date",
     "date_needs_confirmation",
+    "ingredient_relationship_needs_confirmation",
     "unresolved_day_membership",
 }
 
@@ -128,6 +130,16 @@ def validate_content(content: RecordContent, snapshot: dict) -> list[Issue]:
         for group, key in [("items", "item_id"), ("events", "event_id"), ("days", "day_id")]
         for entity in payload[group]
     }
+
+    for item in payload["items"]:
+        for ingredient in item.get("ingredients", []):
+            entities[ingredient["item_id"]] = ingredient
+        if item.get("ingredient_relationship_needs_confirmation"):
+            add(
+                "ingredient_relationship_needs_confirmation",
+                item["item_id"],
+                "Confirm whether these entries are separate foods or ingredients of this food.",
+            )
 
     def valid_inheritance(reference):
         if reference in entities:

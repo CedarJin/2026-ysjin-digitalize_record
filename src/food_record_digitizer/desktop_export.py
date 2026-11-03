@@ -8,10 +8,22 @@ import zipfile
 from openpyxl import Workbook
 from openpyxl.styles import Font
 
+from .research_export import research_csv
+
 
 def tables(records):
     result = {
-        name: [] for name in ("Records", "Food items", "Events", "Days", "Sources", "Evidence", "Issues")
+        name: []
+        for name in (
+            "Records",
+            "Food items",
+            "Ingredients",
+            "Events",
+            "Days",
+            "Sources",
+            "Evidence",
+            "Issues",
+        )
     }
     for r in records:
         rid = r["record_id"]
@@ -94,6 +106,11 @@ def tables(records):
                 row[key.replace("_", " ").title()] = value.get("normalized")
                 row[key.replace("_", " ").title() + " missing reason"] = value.get("missing_reason")
             result["Food items"].append(row)
+            for ingredient in item.get("ingredients", []):
+                ingredient_row = flatten(ingredient, ingredient["item_id"], "ingredient")
+                ingredient_row["Parent food ID"] = item["item_id"]
+                ingredient_row["Quantity basis"] = item.get("ingredient_basis", "unknown")
+                result["Ingredients"].append(ingredient_row)
         for kind, key, ident in (("Events", "events", "event_id"), ("Days", "days", "day_id")):
             for obj in content[key]:
                 result[kind].append(flatten(obj, obj[ident], kind))
@@ -171,7 +188,7 @@ def column_meaning(column):
     return f"{column}: structured field from records.json; blank indicates no value."
 
 
-def export_archive(records, approved=False, release_id=None):
+def export_archive(records, approved=False, release_id=None, study_id=""):
     data = tables(records)
     book = Workbook()
     book.remove(book.active)
@@ -217,6 +234,7 @@ def export_archive(records, approved=False, release_id=None):
     book.save(excel)
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("food_records.csv", research_csv(records, study_id))
         archive.writestr("records.xlsx", excel.getvalue())
         archive.writestr("records.json", json.dumps(records, ensure_ascii=False, indent=2))
         archive.writestr(

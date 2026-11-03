@@ -28,6 +28,7 @@ from .desktop_import import commit_plan, preview_plan
 from .desktop_inputs import reserve_id, stage_proposals
 from .desktop_queue import DEFAULTS, DesktopQueue
 from .ingest import InputError, current_snapshot, digest
+from .research_export import research_csv
 from .review import DEFAULT_POLICY, ReviewError
 from .review_web import STATIC, create_app
 from .schemas import MANUAL_DRAFT_METHODS, Metadata
@@ -591,13 +592,20 @@ def study_app(workspace, capability):
         return Response(export_archive(records), media_type="application/zip")
 
     @app.get("/desktop/export/release/{release_id}")
-    def approved(release_id: str):
+    def approved(release_id: str, format: str = "archive"):
         with workspace.factory() as s:
             release = s.get(db.ReviewRelease, release_id)
             if not release or release.project_id != workspace.project_id:
                 raise InputError("Release not found.")
+            study_id = release.payload.get("study_id", release.project_id)
+            if format == "csv":
+                return Response(
+                    research_csv(release.payload["records"], study_id),
+                    media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="food_records.csv"'},
+                )
             return Response(
-                export_archive(release.payload["records"], True, release.id),
+                export_archive(release.payload["records"], True, release.id, study_id),
                 media_type="application/zip",
                 headers={"Content-Disposition": f'attachment; filename="approved-{release.id}.zip"'},
             )

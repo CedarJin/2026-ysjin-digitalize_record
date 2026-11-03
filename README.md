@@ -70,7 +70,7 @@ Download the installer from the [v0.7.0 testing pre-release](https://github.com/
 
 ### Start with your own data
 
-The workflow below describes the **0.7.0 testing app**, including food-level date editing.
+The workflow below describes the **0.8.0 development app**, including recipes and simplified research CSV exports. The published 0.7.0 installer does not include these new features.
 
 **A new researcher does not need an existing workspace, database or specially arranged input folder.** Choose **Start a new study** and select a new study folder such as `Documents/My Nutrition Study`. The app creates its internal files. Then drop the folder containing your scans and metadata onto the app, or use **Choose folder** / **Choose files**. Your original files stay in place.
 
@@ -106,7 +106,7 @@ Open the whole **My Study** folder. Organized studies require the current develo
 4. Select records and choose **Process selected**. The confirmation shows current drafts reused and records/pages requiring paid requests. Existing candidates for the current input version are reused. Configure a key and model in **Settings** for new extraction. **Save settings** also saves a newly entered key; a blank key field keeps the saved key. Confirm the status reads **API key: saved**. Select the endpoint assigned to your OpenAI project; US regional projects use `https://us.api.openai.com/v1`, and EU regional projects use `https://eu.api.openai.com/v1`. Desktop settings are separate from a repository `.env` file. The key is encrypted with macOS Keychain protection outside the study. Opening a study never starts AI processing. **Pause** stops new dispatches while in-flight requests finish; **Resume** continues queued work. Unknown remote outcomes require a separate retry confirmation.
 5. Use **Add attachment** beside a record for a PDF, PNG/JPEG or typed text. You can drop one PDF or image directly into the attachment form. Identify it as participant material or a researcher note. The app assigns `R0001-A1`, `R0001-A2`, etc., preserves original content, and prepares readable PDF views for images/text. Check the impact preview before importing. Manual drafts are labeled separately from AI drafts; an empty manual draft does not count as an AI extraction and will not be skipped when you explicitly choose processing. Added attachments require renewed review; old AI drafts have not interpreted them. Choose **Edit manually** to retain compatible previous transcription and check new attachments yourself, or explicitly process the updated record. Adding an attachment does not call AI.
 6. Open **Review** and choose **Review now** to edit a complete participant/date group; **Preview** stays read-only. Compare scans with food items, edit time and meal label separately, and check each source page using the controls beside it. **Submit & next** saves and submits before opening the next eligible day. Failures remain on the current day. You can return to a submitted review and choose **Edit review**; approval is withdrawn when necessary, while frozen downloads stay unchanged.
-7. Use **Download → Download reviewed data** for approved human-reviewed results. The app explains which days still need approval. The archive contains XLSX, CSV and full JSON with food items, days, events, sources, issues and evidence. **Original AI drafts** is a secondary download and excludes manual drafts and later human edits.
+7. Use **Download → Download reviewed data** for approved human-reviewed results. The app explains which days still need approval. The default download is **food_records.csv**, with one row per consumed food. Use **Detailed archive** for XLSX, ingredient tables, JSON, source evidence and audit details. **Original AI drafts** is a secondary download and excludes manual drafts and later human edits.
 8. For collaborators, register an offline reviewer under **People & policy**, select days, and choose **Export review packages**. Set **days per package**; whole review units stay together. Task filenames include the reviewer name. The collaborator drops the task ZIP onto the app, reviews without an API key or account, submits each day, and downloads results to return. Reopening the same ZIP resumes local progress. If they revise a submission, they must submit again and download a new result ZIP; an earlier downloaded ZIP does not update itself. Import returned results under **Offline packages**. Returns do not automatically approve data.
 9. Use **Download → Study backup → Save backup** for a verified backup. Recent studies provide quick reopening. Closing during processing offers safe handling of in-flight work; reopening does not silently restart paid requests.
 
@@ -364,7 +364,7 @@ Use the same explicit workspace on later runs to resume that work.
 2. Check its receipt. **Accepted for comparison** means the review was received, not that the data is approved.
 3. Open the corresponding unit and inspect submissions in **Review & decisions**. Compare independent reviews and record an adjudication when needed.
 4. Once the required current reviews and checks are complete, use **Approve for research** (or **Approve selected** in the queue).
-5. Select approved units and click **Create release**. Download the **CSV + JSON archive**, also available under **Research releases**.
+5. Select approved units and click **Create release**. Choose **Download CSV** for the research table, or **Detailed archive** for full provenance. Both are available under **Research releases**.
 
 Repeated import of the same result is detected. Outdated inputs/tasks require a new review. If a task has a different returned result, both versions are retained for comparison rather than silently overwriting the first.
 
@@ -479,3 +479,18 @@ python -m ruff check src tests
 ```
 
 Tests use synthetic sources and mock providers, without billable AI calls. `requirements-tested.txt` records tested dependencies. Start with a small study-specific pilot and check legibility, transcription quality, and the complete review/return/release workflow before processing a large dataset.
+
+
+### Recipes and research CSV (0.8.0)
+
+A consumed dish is one food item. Its recipe ingredients are nested under that food, not counted as additional intake. **Food / beverage** is a short recorded name; **Description** holds extra recorded details. Older results retain their original descriptions and are not reprocessed automatically.
+
+In **Food items**, select entries incorrectly transcribed as separate foods, leaving their parent food unselected. Choose **Make ingredients of…**, select the parent food and specify whether ingredient quantities describe the **Whole recipe**, **Consumed portion**, or are **Not known**. Edit ingredients under **Recipe / ingredients**. The parent food's amount always describes the eaten portion. Recipe yield and ingredient amounts remain separate; the app does not calculate consumed ingredient weights.
+
+Use **Separate food item** to undo an ingredient relationship. Whole-recipe or unknown-basis amounts are retained in a note and the new food's intake amount is cleared for verification. Confirm ambiguous relationships with **Keep as a separate food**, or move the entry into the appropriate recipe. Recipe-only pages do not imply consumption. Only source-supported recipes are extracted; no recipes are inferred from food names.
+
+The default approved download is **food_records.csv**, with these columns:
+
+`Study ID, Participant ID, Date, Time, Meal label, Food, Description, Amount, Unit, Recipe, Preparation method, Place, Brand, Notes, Source record`
+
+**Study ID** is the workspace's stable project identifier, separate from the participant identifier. **Date** is the food's reviewed intake date. Recipe cells list recorded ingredients, quantities, quantity basis and yield. Unknown values remain blank. CSV is UTF-8 with BOM for Excel, and formula-like text is escaped. The detailed archive retains full nested data, evidence and internal identifiers. Existing frozen releases stay unchanged; reopen, correct, resubmit and approve before creating a new release containing recipe corrections. Both owners and offline reviewers must use **0.8.0 or later** for recipe edits and returned results.

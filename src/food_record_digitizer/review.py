@@ -535,6 +535,8 @@ class ReviewService:
                 raise ReviewError(
                     "Date needs confirmation. In Food items, confirm the date or choose Keep Unknown date before submitting."
                 )
+            if any(item.ingredient_relationship_needs_confirmation for item in data.items):
+                raise ReviewError("Confirm food / ingredient relationships in Food items before submitting.")
             sub = self.ReviewSubmission(task_id=task.id, reviewer_id=actor.id, content=task.draft)
             s.add(sub)
             s.flush()
@@ -771,6 +773,7 @@ class ReviewService:
                     {"id": u.id, "name": u.name, "role": u.role}
                     for u in s.scalars(select(ReviewUser).where(ReviewUser.project_id == self.project_id))
                 ],
+                "study_id": self.project_id,
                 "research_approved": True,
                 "records": approved,
                 "processing_report": [

@@ -109,12 +109,15 @@ def project_day(unit_id, sid, day_date, members, pending):
         event_ids = {e["event_id"] for e in events}
         items = [i for i in raw["items"] if i["event_id"] in event_ids]
         item_ids = {i["item_id"] for i in items}
-        selected_ids = event_ids | item_ids | {placement.day_id}
+        ingredient_ids = {g["item_id"] for i in items for g in i.get("ingredients", [])}
+        selected_ids = event_ids | item_ids | ingredient_ids | {placement.day_id}
         all_ids = {
             x[k]
             for group, k in [("days", "day_id"), ("events", "event_id"), ("items", "item_id")]
             for x in raw[group]
         }
+
+        all_ids |= {g["item_id"] for i in raw["items"] for g in i.get("ingredients", [])}
 
         def reference(key):
             if key == placement.day_id:
@@ -187,6 +190,10 @@ def project_day(unit_id, sid, day_date, members, pending):
                 original = item["item_id"]
                 item["item_id"] = rid + "::" + original
                 item["event_id"] = rid + "::" + item["event_id"]
+                for ingredient in item.get("ingredients", []):
+                    ingredient["item_id"] = rid + "::" + ingredient["item_id"]
+                    if ingredient.get("original_event_id"):
+                        ingredient["original_event_id"] = rid + "::" + ingredient["original_event_id"]
                 if item["item_id"] not in seen_items:
                     content["items"].append(item)
                     seen_items.add(item["item_id"])
