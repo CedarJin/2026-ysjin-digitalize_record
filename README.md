@@ -70,7 +70,7 @@ Download the installer from the [v0.7.0 testing pre-release](https://github.com/
 
 ### Start with your own data
 
-The workflow below describes the **0.8.1 development app**, including recipes and simplified research CSV exports. The published 0.7.0 installer does not include these new features.
+The workflow below describes the **0.8.2 development app**, including recipes and simplified research CSV exports. The published 0.7.0 installer does not include these new features.
 
 **A new researcher does not need an existing workspace, database or specially arranged input folder.** Choose **Start a new study** and select a new study folder such as `Documents/My Nutrition Study`. The app creates its internal files. Then drop the folder containing your scans and metadata onto the app, or use **Choose folder** / **Choose files**. Your original files stay in place.
 
@@ -485,7 +485,7 @@ Tests use synthetic sources and mock providers, without billable AI calls. `requ
 
 A consumed dish is one food item. Its recipe ingredients are nested under that food, not counted as additional intake. **Food / beverage** is a short recorded name; **Description** holds extra recorded details. Older results retain their original descriptions and are not reprocessed automatically.
 
-In **Food items**, select entries incorrectly transcribed as separate foods, leaving their parent food unselected. Choose **Make ingredients of…**, select the parent food and specify whether ingredient quantities describe the **Whole recipe**, **Consumed portion**, or are **Not known**. Edit ingredients under **Recipe / ingredients**. The parent food's amount always describes the eaten portion. Recipe yield and ingredient amounts remain separate; the app does not calculate consumed ingredient weights.
+In **Food items**, click **Move to recipe** beside an entry, choose the food it belongs to, and confirm. For several entries, select them and use **Move to recipe…** above the list. No written reason is required. Ingredient quantity basis can be checked later in the recipe; new recipes start as **Not known**, while existing recipes retain their setting. Edit ingredients under **Recipe / ingredients**. The parent food's amount always describes the eaten portion. Recipe yield and ingredient amounts remain separate; the app does not calculate consumed ingredient weights.
 
 Use **Separate food item** to undo an ingredient relationship. Whole-recipe or unknown-basis amounts are retained in a note and the new food's intake amount is cleared for verification. Confirm ambiguous relationships with **Keep as a separate food**, or move the entry into the appropriate recipe. Recipe-only pages do not imply consumption. Only source-supported recipes are extracted; no recipes are inferred from food names.
 
@@ -498,3 +498,5 @@ The default approved download is **food_records.csv**, with these columns:
 ### Re-process an existing result (0.8.1)
 
 In **Records**, click **Re-process anyway** beside an existing draft. For a batch, select records, choose **Process selected**, then **Re-process anyway** in the preview. Confirm the scope and API charges. This bypasses existing AI results and the extraction cache. A successful request creates a new baseline and affected reviews require another review; old drafts, saved review history and frozen releases remain available. A failed request retains the old draft. An uncertain previous API outcome requires explicit retry confirmation. Opening the preview alone never sends scans to OpenAI.
+
+Adding an ingredient or food opens a blank entry immediately, linked to the source page currently displayed. You can refine its evidence later. **Remove food** and **Remove ingredient** use a simple confirmation without a required reason. Edit history is recorded automatically.

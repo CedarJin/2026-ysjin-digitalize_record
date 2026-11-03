@@ -15,9 +15,9 @@ async function choose(app,file){await app.evaluate(({dialog},file)=>{dialog.show
   await page.locator('tr').filter({hasText:'P001'}).getByRole('button',{name:'Review now',exact:true}).click();
   await expect(page.locator('details.item')).toHaveCount(2);
   const rid=await page.evaluate(()=>S.detail.record_id);
-  await page.locator('[data-date-select="1"]').check();await page.locator('#make-ingredients').click();
-  await page.locator('#ingredient-basis').selectOption('whole_recipe');await page.locator('#ingredients-confirm').click();
-  await expect(page.locator('details.item')).toHaveCount(1);await expect(page.locator('.ingredient')).toHaveCount(1);
+  await page.locator('[data-move-recipe="1"]').click();
+  await page.locator('#ingredients-confirm').click();
+  await expect(page.locator('details.item')).toHaveCount(1);await expect(page.locator('.ingredient')).toHaveCount(1);await page.locator('[data-basis="0"]').selectOption('whole_recipe');
   await page.locator('[data-value="items.0.ingredients.0.amount"]').fill('250');
   await page.locator('#save-now').click();await expect(page.locator('#save-status')).toHaveText('All changes saved');
   await page.reload();await page.locator('tr').filter({hasText:'P001'}).getByRole('button',{name:'Review now',exact:true}).click();
@@ -25,7 +25,10 @@ async function choose(app,file){await app.evaluate(({dialog},file)=>{dialog.show
   await page.locator('[data-separate-ingredient="0,0"]').click();
   await expect(page.locator('details.item')).toHaveCount(2);await expect(page.locator('[data-value="items.1.amount"]')).toHaveValue('');
   await page.locator('[data-confirm-food="1"]').click();
-  await page.locator('[data-date-select="1"]').check();await page.locator('#make-ingredients').click();await page.locator('#ingredient-basis').selectOption('whole_recipe');await page.locator('#ingredients-confirm').click();
+  await page.locator('[data-action="add-item"]').click();await expect(page.locator('#ask-response')).toHaveCount(0);await expect(page.locator('details.item')).toHaveCount(3);
+  await page.locator('[data-delete="2"]').click();await expect(page.locator('#ask-response')).toHaveCount(0);await page.getByRole('button',{name:'Cancel',exact:true}).click();await expect(page.locator('details.item')).toHaveCount(3);
+  await page.locator('[data-delete="2"]').click();await page.getByRole('button',{name:'Continue',exact:true}).click();await expect(page.locator('details.item')).toHaveCount(2);
+  await page.locator('[data-date-select="1"]').check();await page.locator('#make-ingredients').click();await page.locator('#ingredients-confirm').click();
   await page.locator('[data-value="items.0.ingredients.0.amount"]').fill('250');await page.locator('[data-value="items.0.ingredients.0.unit"]').fill('g');
   await page.locator('#save-now').click();await expect(page.locator('#save-status')).toHaveText('All changes saved');
   await page.locator('.recipe-panel').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(root,'work/recipe-review-owner.png')});
@@ -39,7 +42,7 @@ async function choose(app,file){await app.evaluate(({dialog},file)=>{dialog.show
  ({app,page}=await launch('recipe-offline'));
  try{
   await choose(app,qa.packages[0].path);await page.getByRole('button',{name:'Review a package',exact:true}).click();await page.getByRole('button',{name:'Open',exact:true}).click();
-  await page.locator('.recipe-panel > summary').click();await page.locator('[data-add-ingredient="0"]').click();await page.locator('#ask-response').fill('Recipe note below food');await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await page.locator('.recipe-panel > summary').click();await page.locator('[data-add-ingredient="0"]').click();await expect(page.locator('#ask-response')).toHaveCount(0);
   await page.locator('[data-value="items.0.ingredients.0.food_name"]').fill('Walnuts');await page.locator('[data-basis="0"]').selectOption('whole_recipe');
   await page.locator('#save-now').click();await expect(page.locator('#save-status')).toHaveText('All changes saved');
   await page.locator('#check-current').click();await page.locator('#save-now').click();await page.locator('#submit').click();await page.locator('#last-review').click();
