@@ -70,7 +70,7 @@ Download the installer from the [v0.7.0 testing pre-release](https://github.com/
 
 ### Start with your own data
 
-The workflow below describes the **0.8.2 development app**, including recipes and simplified research CSV exports. The published 0.7.0 installer does not include these new features.
+The workflow below describes the **0.9.0 development app**, including recipes and simplified research CSV exports. The published 0.7.0 installer does not include these new features.
 
 **A new researcher does not need an existing workspace, database or specially arranged input folder.** Choose **Start a new study** and select a new study folder such as `Documents/My Nutrition Study`. The app creates its internal files. Then drop the folder containing your scans and metadata onto the app, or use **Choose folder** / **Choose files**. Your original files stay in place.
 
@@ -500,3 +500,13 @@ The default approved download is **food_records.csv**, with these columns:
 In **Records**, click **Re-process anyway** beside an existing draft. For a batch, select records, choose **Process selected**, then **Re-process anyway** in the preview. Confirm the scope and API charges. This bypasses existing AI results and the extraction cache. A successful request creates a new baseline and affected reviews require another review; old drafts, saved review history and frozen releases remain available. A failed request retains the old draft. An uncertain previous API outcome requires explicit retry confirmation. Opening the preview alone never sends scans to OpenAI.
 
 Adding an ingredient or food opens a blank entry immediately, linked to the source page currently displayed. You can refine its evidence later. **Remove food** and **Remove ingredient** use a simple confirmation without a required reason. Edit history is recorded automatically.
+
+### Sync an input folder (0.9.0)
+
+In **Records**, click **Sync folder** and choose the folder containing your PDFs and metadata. If several metadata files are present, choose the relevant CSV, XLSX or JSON once. The app remembers this folder for the current study. Subsequent clicks check the folder again without selecting each PDF or retyping metadata.
+
+Sync opens a preview of new, updated and unchanged records. Choose **Import changes** to apply it; existing-record updates show the affected reviews and require confirmation. **Show files and metadata** opens the association table if you need to correct a match. Sync never starts AI processing; use **Process selected** afterwards for new scans. Unchanged records keep their existing results.
+
+Use stable `record_id` or `filename` metadata columns for reliable incremental matching. Previously confirmed identical metadata rows retain their associations, even after reordering. New or changed rows with no unambiguous file identifier require manual matching; row order is never used as evidence. Renamed files may need their record association checked. Identical PDF content is shown in the preview rather than silently merging different filenames.
+
+Deleting a file from the input folder does not delete it from the study. A source changed after preview must be synced again before confirmation. The study's `data/` folder can hold input PDFs and metadata, but `data/sources/`, internal app files and generated results are excluded. Do not edit app-managed source copies. Use **Settings → Change sync folder** if the input folder or metadata file moves. Limits per sync: 1,000 PDFs, 32 MB per PDF, 512 MB total PDFs and 4 MB metadata.

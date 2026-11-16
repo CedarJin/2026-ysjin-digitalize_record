@@ -129,6 +129,19 @@ app.whenReady().then(async()=>{
   handle('restore',async()=>{const source=await dialog.showOpenDialog(win,{title:'Choose study backup',properties:['openFile'],filters:[{name:'Study backup',extensions:['zip']}]});if(!source.canceled)await openArchive(source.filePaths[0]);});
   handle('open-dropped',openDropped);
   handle('take-import',()=>{const data=pendingImport;pendingImport=null;return data;});
+  handle('sync-folder',async change=>{
+    if(mode!=='study')throw Error('Create or continue a study first.');
+    if(dropBusy||switching)throw Error('An import is already being prepared. Please wait.');
+    if(!await prepareLeave(true))return;
+    dropBusy=true;
+    try{
+      const info=await local('/desktop/state');let folder=info.sync_folder;
+      if(change||!folder){const chosen=await dialog.showOpenDialog(win,{title:'Choose input folder to sync',properties:['openDirectory']});if(chosen.canceled)return;folder=chosen.filePaths[0];}
+      let data=await local('/desktop/sync-folder',{folder,reset_metadata:change===true});
+      if(data.choose_metadata){const chosen=await dialog.showOpenDialog(win,{title:'Choose the metadata file to use for this folder',defaultPath:data.choose_metadata[0],properties:['openFile'],filters:[{name:'Metadata',extensions:['csv','xlsx','json']}]});if(chosen.canceled)return;data=await local('/desktop/sync-folder',{folder,metadata:chosen.filePaths[0]});}
+      pendingImport=data;await win.loadURL(origin+'/?view=import-ready');
+    }finally{dropBusy=false;}
+  });
   handle('choose-inputs',async kind=>{if(mode!=='study')throw Error('Create or continue a study first.');if(!['folder','files'].includes(kind))throw Error('Choose files or a folder.');const chosen=await dialog.showOpenDialog(win,{title:kind==='folder'?'Choose folder with records and metadata':'Choose PDF records and metadata',properties:kind==='folder'?['openDirectory']:['openFile','multiSelections']});if(!chosen.canceled)return openDropped(chosen.filePaths);});
   handle('organized-copy',async()=>{if(mode!=='study')throw Error('Open a study first.');if(!await canSwitch())return;const chosen=await dialog.showSaveDialog(win,{title:'Save organized study copy',defaultPath:studyPath+' (organized)',buttonLabel:'Save copy'});if(chosen.canceled)return;await local('/desktop/organized-copy',{path:chosen.filePath});await start({mode:'study',path:chosen.filePath});});
   handle('home',async()=>{if(await canSwitch())await start();});

@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('desktop', Object.freeze({
   recentStudies: () => ipcRenderer.invoke('recent-studies'),
   openRecent: index => ipcRenderer.invoke('open-recent', Number(index)),
   createStudy: name => ipcRenderer.invoke('create-study', typeof name==='string'?name:''),
+  syncFolder: change => ipcRenderer.invoke('sync-folder', change === true),
   chooseInputFolder: () => ipcRenderer.invoke('choose-inputs','folder'),
   chooseInputFiles: () => ipcRenderer.invoke('choose-inputs','files'),
   takeImport: () => ipcRenderer.invoke('take-import'),

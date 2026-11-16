@@ -32,6 +32,7 @@ def create_backup(workspace, output):
         files = {"records.db": snapshot, "workspace.json": workspace.path / "workspace.json"}
         for name in (
             "desktop-settings.json",
+            "desktop-sync.json",
             "desktop-version.json",
             "desktop-sequence.json",
             "desktop-current-import.json",
@@ -91,6 +92,7 @@ def restore_backup(source, output):
                     "records.db",
                     "workspace.json",
                     "desktop-settings.json",
+                    "desktop-sync.json",
                     "desktop-version.json",
                     "desktop-jobs.sqlite",
                     "desktop-sequence.json",

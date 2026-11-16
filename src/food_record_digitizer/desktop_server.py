@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
-from . import db
+from . import db, desktop_sync
 from .backup import create_backup, restore_backup
 from .desktop_archive import inspect_archive
 from .desktop_attachments import previous_attachment_draft, stage_attachment
@@ -229,6 +229,7 @@ def study_app(workspace, capability):
                 pending_import_error = "The unfinished import could not be opened. Existing Study records are safe. Restore a verified backup to recover that import, or start a new import from the original files."
         return dict(
             name=name,
+            sync_folder=desktop_sync.settings(workspace).get("folder"),
             pending_import=pending_import,
             pending_import_error=pending_import_error,
             path=str(workspace.root),
@@ -365,6 +366,13 @@ def study_app(workspace, capability):
         if not queue.key:
             raise InputError("Add your API key in Settings before resuming queued requests.")
         return queue.resume(settings()["base_url"])
+
+    @app.post("/desktop/sync-folder")
+    async def sync_folder(request: Request):
+        body = await request.json()
+        return desktop_sync.scan(
+            workspace, body.get("folder"), body.get("metadata"), body.get("reset_metadata") is True
+        )
 
     @app.post("/desktop/import/upload")
     async def upload(request: Request):
@@ -540,7 +548,9 @@ def study_app(workspace, capability):
                 )
             if manifest.get("checked_revisions") and body.get("allow_update") is not True:
                 raise InputError("Confirm updating the listed existing records before importing.")
+            desktop_sync.check_snapshot(manifest)
             result = commit_plan(workspace, directory, body["entries"], body["metadata"])
+            desktop_sync.remember_import(workspace, manifest, body["entries"], body["metadata"])
             pointer = workspace.path / "desktop-current-import.json"
             if pointer.exists() and json.loads(pointer.read_text()).get("token") == token:
                 pointer.unlink()

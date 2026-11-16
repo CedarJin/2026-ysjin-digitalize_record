@@ -203,10 +203,25 @@ def reserve_id(workspace, parent=None, occupied=()):
         return f"R{maximum:04d}"
 
 
-def stage_proposals(workspace, directory, descriptors, metadata_path=None, metadata_name=None):
+def stage_proposals(
+    workspace,
+    directory,
+    descriptors,
+    metadata_path=None,
+    metadata_name=None,
+    source_hints=None,
+    metadata_hints=None,
+):
     """Reserve proposed IDs without creating source revisions or guessing row order."""
     directory = Path(directory)
     rows, ignored_columns = read_desktop_metadata(metadata_path) if metadata_path else ([], [])
+    if metadata_hints:
+        from .desktop_sync import row_key
+
+        for row in rows:
+            matches = metadata_hints.get(row_key(row), [])
+            if not row.get("record_id") and len(matches) == 1:
+                row["record_id"] = matches[0]
     existing, by_hash = {}, {}
     with workspace.factory() as session:
         for record in session.scalars(select(Record).where(Record.project_id == workspace.project_id)):
@@ -220,6 +235,7 @@ def stage_proposals(workspace, directory, descriptors, metadata_path=None, metad
         filename = entry["filename"]
         stem = Path(filename).stem
         chosen = stem if re.fullmatch(r"R\d+(?:-A[1-9]\d*)?", stem) or stem in explicit else None
+        chosen = chosen or (source_hints or {}).get(filename)
         named = [
             r
             for r in rows
@@ -237,7 +253,7 @@ def stage_proposals(workspace, directory, descriptors, metadata_path=None, metad
             chosen = rows[0]["record_id"]
         checksum = hashlib.sha256((directory / entry["file"]).read_bytes()).hexdigest()
         matches = by_hash.get(checksum, [])
-        if not chosen and len(matches) == 1:
+        if not chosen and len(matches) == 1 and source_hints is None:
             chosen = matches[0]
         initial.append({**entry, "source_id": chosen, "sha256": checksum, "matches": matches})
     with sequence_state(workspace) as state:
@@ -283,6 +299,8 @@ def stage_proposals(workspace, directory, descriptors, metadata_path=None, metad
         ]
         if len(matches) == 1:
             row["record_id"] = split_id(matches[0]["source_id"])[0]
+        elif not matches and (source_hints or {}).get(row["source_filename"]):
+            row["record_id"] = split_id(source_hints[row["source_filename"]])[0]
     result = {
         "token": directory.name,
         "entries": initial,
