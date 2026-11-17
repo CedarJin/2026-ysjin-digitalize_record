@@ -39,16 +39,16 @@ async function drop(page,files){
   await page.locator('[data-meta="0"][data-field="record_id"]').selectOption('R0002');
   await page.locator('[data-meta="1"][data-field="record_id"]').selectOption('R0001');
   await page.getByRole('button',{name:'Home',exact:true}).click();
-  await page.getByRole('button',{name:'Research study renamed',exact:true}).click();
+  await page.getByRole('button',{name:'Continue: Research study renamed',exact:true}).click();
   await page.getByRole('button',{name:'Resume unfinished import',exact:true}).click();
   await expect(page.locator('[data-meta="0"][data-field="record_id"]')).toHaveValue('R0002');
   await page.getByRole('button',{name:'Check import',exact:true}).click();await page.getByRole('button',{name:'Import records',exact:true}).click();
-  await expect(page.locator('[data-edit-metadata="R0001"]')).toBeVisible();
+  await expect(page.locator('tr[data-record="R0001"] .record-actions>summary')).toBeVisible();
   let state=await page.evaluate(()=>fetch('/desktop/state').then(r=>r.json()));
   assert.equal(state.name,'Research study renamed');assert.equal(state.records.length,2);
   assert.equal(state.records.find(r=>r.record_id==='R0002').metadata.subject_id,'P100');assert.equal(state.records.find(r=>r.record_id==='R0002').metadata.date,null);
   assert(fs.existsSync(path.join(study,'data/sources/records/R0001/R0001.pdf')));assert(fs.existsSync(path.join(incoming,'Unsorted A.pdf')));
-  await page.locator('[data-edit-metadata="R0001"]').click();await page.locator('#metadata-participant').fill('P900');await page.locator('#metadata-date').fill('');
+  await page.locator('tr[data-record="R0001"] .record-actions>summary').click();await page.locator('[data-edit-metadata="R0001"]').click();await page.locator('#metadata-participant').fill('P900');await page.locator('#metadata-date').fill('');
   await page.getByRole('button',{name:'Check changes',exact:true}).click();await page.getByRole('button',{name:'Save metadata',exact:true}).click();
   await expect(page.locator('#dialog')).not.toBeVisible();
   state=await page.evaluate(()=>fetch('/desktop/state').then(r=>r.json()));assert.equal(state.records.find(r=>r.record_id==='R0001').metadata.subject_id,'P900');
@@ -56,7 +56,7 @@ async function drop(page,files){
   await expect(page.locator('[data-source="0"]')).toHaveValue('R0003');
   await page.locator('[data-meta="0"][data-field="subject_id"]').fill('P300');
   await page.getByRole('button',{name:'Check import',exact:true}).click();await page.getByRole('button',{name:'Import records',exact:true}).click();
-  await page.getByRole('button',{name:'Download',exact:true}).click();
+  await page.getByRole('button',{name:'Export CSV',exact:true}).click();
   const backup=path.join(qa.folder,'study-backup.zip');
   await app.evaluate(({session},target)=>{session.defaultSession.on('will-download',(_event,item)=>item.setSavePath(target));},backup);
   await page.getByText('Study backup',{exact:true}).click();await page.getByRole('button',{name:'Save backup',exact:true}).click();
@@ -65,7 +65,7 @@ async function drop(page,files){
   await drop(page,[qa.packages[0].path]);
   await expect(page.getByRole('heading',{name:'Review package',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Open',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#scan')?.naturalWidth>0);
-  const time=()=>page.getByRole('textbox',{name:'Time normalized',exact:true});
+  const time=()=>page.getByRole('textbox',{name:'Time for food 1',exact:true});
   await time().fill('09:15');const before=page.url();await drop(page,[corrupt]);
   await expect(page.locator('#desktop-drop-status')).toContainText('damaged');assert.equal(page.url(),before);await expect(time()).toHaveValue('09:15');
   await time().fill('10:10');await drop(page,[qa.packages[0].path]);
@@ -81,6 +81,7 @@ async function drop(page,files){
   state=await page.evaluate(()=>fetch('/desktop/state').then(r=>r.json()));assert.equal(state.records.length,3);assert.equal(state.queue.active,0);assert.equal(state.queue.queued,0);assert.equal(state.has_key,false);
   await page.screenshot({path:path.join(root,'work/interaction-import-drop.png')});
   console.log('Native review ZIP drop, invalid ZIP protection, same-package resume, failed-save switch protection, result guidance and dropped-backup restore passed; no AI requests');
+  await page.getByRole('button',{name:'Home',exact:true}).click();await expect(page.locator('[data-recent]').first()).toContainText('Continue:');const count=await page.locator('[data-recent]').count();await page.locator('[data-hide-recent]').first().click();await expect(page.locator('[data-recent]')).toHaveCount(count-1);assert.ok(fs.existsSync(restored));assert.ok(fs.existsSync(study));console.log('Recent study identification and hide without deleting files passed');
  }catch(error){if(page){await page.screenshot({path:path.join(root,'work/interaction-drop-failure.png')}).catch(()=>{});console.log((await page.locator('body').innerText()).slice(0,5000));}throw error;}
  finally{await app.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

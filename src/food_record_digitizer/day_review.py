@@ -40,10 +40,17 @@ class DayReviewService(ReviewService):
         # Validate source versions again inside the operation's transaction.
         for member in record.snapshot["members"]:
             source = s.scalar(select(db.Record).where(db.Record.id == member["record_pk"]).with_for_update())
-            candidate = ReviewService.latest(self, s, source)
+            candidate_id = s.scalar(
+                select(db.Candidate.id)
+                .where(
+                    db.Candidate.record_pk == source.id, db.Candidate.input_version == source.input_version
+                )
+                .order_by(db.Candidate.created_at.desc(), db.Candidate.id.desc())
+                .limit(1)
+            )
             if (
                 source.input_version != member["input_version"]
-                or (candidate.id if candidate else None) != member["candidate_id"]
+                or candidate_id != member["candidate_id"]
                 or source.active_run_id != member["active_run_id"]
                 or source.state == "excluded"
             ):
@@ -93,6 +100,23 @@ class DayReviewService(ReviewService):
                             409,
                         )
         return super().assign(actor_id, record_id, assignee_id, due_at)
+
+    def assign_many(self, actor_id, record_ids, assignee_id, due_at=None):
+        """Reconcile once per batch; each assignment still validates live sources."""
+        with self.factory() as session:
+            self.actor(session, actor_id, True)
+        with self._sync_lock:
+            self._unresolved_placements = sync_day_units(self)
+            results = []
+            for record_id in dict.fromkeys(record_ids):
+                try:
+                    task_id = DayReviewService.assign.__wrapped__(
+                        self, actor_id, record_id, assignee_id, due_at
+                    )
+                    results.append({"record_id": record_id, "task_id": task_id})
+                except ReviewError as exc:
+                    results.append({"record_id": record_id, "error": str(exc)})
+            return results
 
     def checked(self, content, record, snapshot, baseline, final=False):
         days = content.get("days", [])
@@ -378,7 +402,7 @@ def reconciled(method):
         with self.factory() as s:
             self.actor(s, actor_id)
         with self._sync_lock:
-            sync_day_units(self)
+            self._unresolved_placements = sync_day_units(self)
             return method(self, actor_id, *args, **kwargs)
 
     return call

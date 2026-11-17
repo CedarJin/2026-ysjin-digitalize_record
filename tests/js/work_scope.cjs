@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');
+const scope=require('../../src/food_record_digitizer/static/work_scope.js');
+const data=new Map(),storage={getItem:k=>data.get(k),setItem:(k,v)=>data.set(k,v)};
+const rows=[{record_id:'day1',source_record_ids:['R1','R2']},{record_id:'day2',source_record_ids:['R1']},{record_id:'unknown1',source_record_ids:['R3']},{record_id:'unknown2',source_record_ids:['R4']}];
+scope.sources(storage,'studyA',['R1']);
+assert.deepEqual(scope.resolve(scope.read(storage,'studyA'),rows).map(r=>r.record_id),['day1','day2']);
+scope.days(storage,'studyA',['day1'],rows);
+assert.deepEqual(scope.read(storage,'studyA').sources,['R1','R2']);
+assert.deepEqual(scope.resolve(scope.read(storage,'studyA'),rows).map(r=>r.record_id),['day1'],'Do not expand exact review day to other days sharing the scan');
+assert.deepEqual(scope.read(storage,'studyB').sources,[],'Separate studies cannot inherit selection');
+scope.days(storage,'studyA',['unknown1'],rows);
+assert.deepEqual(scope.resolve(scope.read(storage,'studyA'),rows).map(r=>r.record_id),['unknown1'],'Unknown dates remain separate');
+scope.days(storage,'studyA',[],rows);assert.deepEqual(scope.resolve(scope.read(storage,'studyA'),rows),[]);
+scope.sources(storage,'studyA',['R4']);assert.equal(scope.read(storage,'studyA').days,null,'Changing source selection deliberately replaces exact day scope');
+console.log('Shared scope: multi-day scans, complete day sources, study isolation, unknown dates and clearing passed.');

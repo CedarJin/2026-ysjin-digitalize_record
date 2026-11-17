@@ -23,7 +23,35 @@
     }
     return null;
   }
-  const api={taskFor,ready,completed,next};
+  function issueGroups(content,blockingCodes=[]){
+    const foods=content.items||[],events=content.events||[];
+    const fieldNames={raw_or_cooked:'Raw or cooked',measurement_method:'Measurement method',preparation:'Preparation',food_name:'Food',quantity:'Amount',day_id:'Date',meal_label:'Meal label'};
+    function locate(target){
+      const match=String(target||'').match(/(?:record\.)?items\[(\d+)\](?:\.(\w+))?/);
+      if(match&&foods[Number(match[1])])return {items:[Number(match[1])],field:match[2]||''};
+      const indices=[];let field='';
+      foods.forEach((food,i)=>{
+        const entity=[food,...(food.ingredients||[])].find(x=>target===x.item_id||String(target).startsWith(x.item_id+'.'));
+        const event=events.find(e=>e.event_id===food.event_id);
+        if(entity){indices.push(i);field=String(target).slice(entity.item_id.length+1);}
+        else if(event&&(target===event.event_id||String(target).startsWith(event.event_id+'.')||target===event.day_id)){indices.push(i);field=target===event.day_id?'Date':String(target).slice(event.event_id.length+1);}
+      });
+      return {items:indices,field};
+    }
+    const groups=new Map();
+    (content.issues||[]).forEach((issue,index)=>{
+      const loc=locate(issue.target),field=fieldNames[loc.field]||loc.field.replaceAll('_',' ');
+      const label=loc.items.length?loc.items.map(i=>foods[i].food_name?.normalized||foods[i].description?.normalized||'Food '+(i+1)).join(', '):'This day';
+      const blocking=blockingCodes.includes(issue.code);
+      const message=String(issue.message||'').replace(/(?:record\.)?items\[\d+\](?:\.\w+)*/g,label);
+      const key=JSON.stringify([issue.code,message,field,blocking]);
+      let group=groups.get(key);
+      if(!group){group={title:field||String(issue.code).replaceAll('_',' ').toLowerCase(),message,blocking,items:[],issues:[]};groups.set(key,group);}
+      group.items=[...new Set([...group.items,...loc.items])];group.issues.push(index);
+    });
+    return [...groups.values()].sort((a,b)=>Number(b.blocking)-Number(a.blocking));
+  }
+  const api={taskFor,ready,completed,next,issueGroups};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   else root.ReviewFlow=api;
 })(globalThis);

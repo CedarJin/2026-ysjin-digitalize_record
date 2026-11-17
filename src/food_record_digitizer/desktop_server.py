@@ -95,6 +95,7 @@ def identity(workspace):
             project_id=workspace.project_id,
             csrf=secrets.token_urlsafe(32),
             desktop=True,
+            study_path=str(workspace.root),
         )
 
 
@@ -176,7 +177,7 @@ def study_app(workspace, capability):
 
     @app.get("/desktop/assets/{name}")
     def asset(name: str):
-        if name not in {"desktop.js", "desktop.css"}:
+        if name not in {"desktop.js", "desktop.css", "work_scope.js"}:
             raise InputError("Unknown asset")
         return FileResponse(STATIC / name)
 
@@ -234,7 +235,7 @@ def study_app(workspace, capability):
             pending_import_error=pending_import_error,
             path=str(workspace.root),
             records=queue.records(),
-            queue=queue.status(),
+            queue={**queue.status(), "batches": queue.batch_history()},
             settings=settings(),
             has_key=bool(queue.key),
             csrf=who["csrf"],
@@ -694,7 +695,7 @@ def main():
 
         @app.get("/desktop/assets/{name}")
         def asset(name: str):
-            if name not in {"desktop.js", "desktop.css"}:
+            if name not in {"desktop.js", "desktop.css", "work_scope.js"}:
                 return Response(status_code=404)
             return FileResponse(STATIC / name)
 

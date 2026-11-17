@@ -14,7 +14,7 @@ const {execFileSync}=require('node:child_process');const root=path.resolve(__dir
   await page.getByRole('button',{name:'Continue a study',exact:true}).waitFor({timeout:60000});
   await app.evaluate(({dialog},study)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[study]});},qa.study);
   await page.getByRole('button',{name:'Continue a study',exact:true}).click();
-  await page.locator('[data-add-attachment="R001"]').waitFor();
+  await page.locator('tr[data-record="R001"] .record-actions>summary').waitFor();
   const errorState=await page.evaluate(()=>fetch('/desktop/state').then(r=>r.json()));const errorRow=errorState.records.find(r=>r.record_id==='R001');errorRow.state='failed';errorRow.error='api_http_401';
   await page.route('**/desktop/state',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(errorState)}));
   await page.reload();
@@ -28,7 +28,7 @@ const {execFileSync}=require('node:child_process');const root=path.resolve(__dir
   await expect(page.locator('#dialog')).toContainText('1 existing AI drafts will be reused');
   await page.locator('#close-dialog').click();await page.unroute('**/desktop/state');await page.reload();
   for(const kind of ['text','image']){
-   await page.locator('[data-add-attachment="R001"]').click();
+   await page.locator('tr[data-record="R001"] .record-actions').evaluate(el=>el.open=true);await page.locator('[data-add-attachment="R001"]').click();
    await page.locator('#attachment-form [name="origin"]').selectOption(kind==='text'?'researcher_note':'participant_material');
    if(kind==='text')await page.locator('#attachment-form textarea').fill('Researcher clarification: check cup size against participant note.');
    else {
@@ -61,7 +61,7 @@ const {execFileSync}=require('node:child_process');const root=path.resolve(__dir
   await page.getByRole('button',{name:'Issues',exact:true}).click();
   await expect(page.locator('#editor')).toContainText('has not been interpreted by AI');
   await page.getByRole('button',{name:'Food items',exact:true}).click();
-  await page.getByRole('textbox',{name:'Time normalized',exact:true}).focus();
+  await page.getByRole('textbox',{name:'Time for food 1',exact:true}).focus();
   await page.keyboard.press('Meta+Enter');
   await page.getByRole('textbox',{name:'Response',exact:true}).fill('Additional food row near the bottom');
   await page.locator('dialog[open] [data-accept]').click();

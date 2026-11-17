@@ -309,3 +309,74 @@ def test_metadata_only_record_not_in_review_queue(day_review):
         s.add(db.Record(project_id=svc.project_id, record_id="R999", state="missing_source"))
     assert len(svc.queue(owner)) == 1
     assert all(p["record_id"] != "R999" for p in svc.placements(owner))
+
+
+def test_send_reuses_assignment_and_existing_package(day_review):
+    svc, owner, reviewer, *_ = day_review
+    rid = svc.queue(owner)[0]["record_id"]
+    task_id = svc.assign(owner, rid, reviewer)
+    manager = OfflineManager(svc.workspace)
+    first = manager.export(owner, reviewer, [rid])[0]
+    manifest, _ = unpack(Path(first["path"]).read_bytes(), "task")
+    assert manifest["units"][0]["task_id"] == task_id
+    second = manager.export(owner, reviewer, [rid])[0]
+    assert second["package_id"] == first["package_id"]
+    assert second["reused"] is True
+    with svc.factory() as session:
+        assert session.scalar(select(func.count()).select_from(db.DayReviewTask)) == 1
+        assert session.scalar(select(func.count()).select_from(db.OfflinePackage)) == 1
+    result = result_for(first)
+    assert manager.import_result(owner, pack(result, []))["tasks"][0]["status"] == "accepted"
+
+
+def test_failed_send_rolls_back_tasks(day_review, monkeypatch):
+    svc, owner, reviewer, *_ = day_review
+    rid = svc.queue(owner)[0]["record_id"]
+    import food_record_digitizer.offline as module
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("synthetic packaging failure")
+
+    monkeypatch.setattr(module, "pack", fail)
+    with pytest.raises(RuntimeError):
+        OfflineManager(svc.workspace).export(owner, reviewer, [rid])
+    with svc.factory() as session:
+        assert session.scalar(select(func.count()).select_from(db.DayReviewTask)) == 0
+        assert session.scalar(select(func.count()).select_from(db.OfflinePackage)) == 0
+
+
+def test_select_next_is_reviewer_scoped_and_does_not_assign(day_review):
+    svc, owner, a, b, _ = day_review
+    manager = OfflineManager(svc.workspace)
+    rid = svc.queue(owner)[0]["record_id"]
+    first = manager.select_next(owner, a)
+    assert first["unit_ids"] == [rid]
+    assert first["days"] == first["records"] == 1
+    with svc.factory() as session:
+        assert session.scalar(select(func.count()).select_from(db.DayReviewTask)) == 0
+    svc.assign(owner, rid, a)
+    assert manager.select_next(owner, b)["days"] == 0
+    assert manager.select_next(owner, b, independent=True)["unit_ids"] == [rid]
+    assert manager.select_next(owner, a, independent=True)["days"] == 0
+    assert manager.select_next(owner, b, independent=True, scope=[])["days"] == 0
+    with pytest.raises(ReviewError):
+        manager.select_next(owner, b, count=0)
+
+
+def test_send_mixed_existing_and_new_packages_and_partial_selection(day_review, tmp_path):
+    svc, owner, reviewer, *_ = day_review
+    add_source(svc.workspace, tmp_path, rid="R002", sid="P002")
+    add_source(svc.workspace, tmp_path, rid="R003", sid="P003")
+    ids = [r["record_id"] for r in svc.queue(owner)]
+    manager = OfflineManager(svc.workspace)
+    original = manager.export(owner, reviewer, ids[:2], units_per_package=2)[0]
+    with pytest.raises(ReviewError, match="larger review package"):
+        manager.export(owner, reviewer, ids[:1])
+    mixed = manager.export(owner, reviewer, ids, units_per_package=2)
+    assert len(mixed) == 2
+    assert mixed[0]["package_id"] == original["package_id"] and mixed[0]["reused"]
+    assert sum(p["days"] for p in mixed) == 3
+    with svc.factory() as session:
+        assert session.scalar(select(func.count()).select_from(db.DayReviewTask)) == 3
+    for package in mixed:
+        assert all(t["status"] == "accepted" for t in manager.import_result(owner, pack(result_for(package), []))["tasks"])

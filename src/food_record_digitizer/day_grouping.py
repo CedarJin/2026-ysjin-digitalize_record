@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from collections import defaultdict
 from datetime import date
 from types import SimpleNamespace
@@ -63,10 +64,7 @@ def issue(code, target, message):
     return {"code": code, "target": target, "message": message, "severity": "blocking", "resolution": None}
 
 
-def project_day(unit_id, sid, day_date, members, pending):
-    """Project only selected day events/items; retain all source pages as review context."""
-    content = RecordContent(record_id=unit_id).model_dump(mode="json")
-    content["days"] = [{"day_id": "intake-day", "date": unknown().model_dump()}]
+def source_membership(unit_id, sid, day_date, members, pending):
     snapshot = {
         "documents": {},
         "metadata": {},
@@ -75,7 +73,6 @@ def project_day(unit_id, sid, day_date, members, pending):
         "review_unit": {"id": unit_id, "subject_id": sid, "date": day_date},
         "pending_placements": pending,
     }
-    seen_events, seen_items, seen_pages = set(), set(), set()
     for placement, record, candidate, source in members:
         rid = record.record_id
         snapshot["documents"].update(copy.deepcopy(source["documents"]))
@@ -100,8 +97,20 @@ def project_day(unit_id, sid, day_date, members, pending):
                 "source_day_count": source.get("day_count", 1),
             }
         )
+    snapshot["members"].sort(key=lambda m: (m["record_id"], m["day_id"]))
+    return snapshot
+
+
+def project_day(unit_id, sid, day_date, members, pending):
+    """Project only selected day events/items; retain all source pages as review context."""
+    content = RecordContent(record_id=unit_id).model_dump(mode="json")
+    content["days"] = [{"day_id": "intake-day", "date": unknown().model_dump()}]
+    snapshot = source_membership(unit_id, sid, day_date, members, pending)
+    seen_events, seen_items, seen_pages = set(), set(), set()
+    for placement, record, candidate, source in members:
+        rid = record.record_id
         raw = (
-            copy.deepcopy(candidate.content)
+            json.loads(json.dumps(candidate.content, ensure_ascii=False))
             if candidate
             else RecordContent(record_id=rid).model_dump(mode="json")
         )
@@ -410,8 +419,18 @@ def sync_day_units(service):
                             "day_id": p.day_id,
                         }
                     )
-            content, snapshot = project_day(unit_id, sid, day_date, members, pending)
+            unit = s.get(DayReviewUnit, unit_id)
             policy = service.policy(s)
+            # Immutable candidate IDs and source versions identify the projection inputs.
+            # Reuse the saved projection only when every membership input still agrees.
+            if unit and unit.state != "retired":
+                membership = source_membership(unit_id, sid, day_date, members, pending)
+                existing = {**unit.snapshot, "entity_origins": {}}
+                if membership == existing and unit.fingerprint == digest(
+                    {"snapshot": unit.snapshot, "policy_id": policy.id if policy else None}
+                ):
+                    continue
+            content, snapshot = project_day(unit_id, sid, day_date, members, pending)
             fingerprint = digest({"snapshot": snapshot, "policy_id": policy.id if policy else None})
             unit = s.get(DayReviewUnit, unit_id)
             if not unit:

@@ -4,7 +4,7 @@ Turn handwritten food-record PDFs into structured, evidence-linked data, with hu
 
 The intended workflow is:
 
-**PDFs + metadata → AI drafts → offline human review → owner approval → frozen research release**
+**PDFs + metadata → AI drafts → human review → owner approval → research CSV**
 
 The study owner keeps the main workspace on their computer. Collaborators receive ZIP packages, review on their own computers, and return result ZIPs. No shared server is required, and the owner's computer does not need to stay on while collaborators review.
 
@@ -62,7 +62,9 @@ The desktop app wraps this same Python package. It includes Python and a PDF ren
 
 ### Install the app
 
-Download the installer from the [v0.9.2 testing pre-release](https://github.com/CedarJin/2026-ysjin-digitalize_record/releases/tag/v0.9.2): choose **Food-Record-0.9.2-macOS-arm64.zip**, not the automatically generated Source code archive. A SHA-256 checksum file is provided alongside it. This is a testing preview; read the release notes for compatibility and pending validation.
+This guide describes version **0.10.2**, an internal testing build for collaborators.
+
+Download the installer from the [v0.10.2 testing pre-release](https://github.com/CedarJin/2026-ysjin-digitalize_record/releases/tag/v0.10.2): choose **Food-Record-0.10.2-macOS-arm64.zip**, not the automatically generated Source code archive. A SHA-256 checksum file is provided alongside it. This is a testing preview; read the release notes for compatibility and pending validation.
 
 1. Unzip the **installer ZIP**.
 2. Drag **Food Record.app** into **Applications** and open it.
@@ -70,7 +72,7 @@ Download the installer from the [v0.9.2 testing pre-release](https://github.com/
 
 ### Start with your own data
 
-The workflow below describes **version 0.9.2**, including recipes, simplified research CSV exports, folder sync, and improved field-source validation.
+The workflow below describes **version 0.10.2**, including shared record selections, processing progress, simplified review, and multi-reviewer package allocation.
 
 **A new researcher does not need an existing workspace, database or specially arranged input folder.** Choose **Start a new study** and select a new study folder such as `Documents/My Nutrition Study`. The app creates its internal files. Then drop the folder containing your scans and metadata onto the app, or use **Choose folder** / **Choose files**. Your original files stay in place.
 
@@ -104,11 +106,13 @@ Open the whole **My Study** folder. Organized studies require the current develo
 2. In **Add records**, use **Choose PDF folder** and select metadata separately below, or choose individual PDFs. **Choose combined folder** imports a folder containing both PDFs and metadata. **Choose different files** returns from the association preview; unfinished associations remain resumable. Scans without usable IDs receive sequential IDs such as `R0001`; later batches continue the sequence. Check the file associations before importing. The app retains original filenames and flags matching existing sources. You can leave an unfinished import and resume it later.
 3. Metadata may contain only `participant,date`. Other fields are optional, and unknown dates may remain blank. If several scans cannot be uniquely matched to metadata rows, select the corresponding scan for each row; row order is not assumed. Metadata rows without a PDF do not become review tasks. Use **Edit metadata** later to correct values; the preview identifies affected reviews. Existing transcription is reused without an AI request when sources are unchanged.
 4. Select records and choose **Process selected**. The confirmation shows current drafts reused and records/pages requiring paid requests. Existing candidates for the current input version are reused. Configure a key and model in **Settings** for new extraction. **Save settings** also saves a newly entered key; a blank key field keeps the saved key. Confirm the status reads **API key: saved**. Select the endpoint assigned to your OpenAI project; US regional projects use `https://us.api.openai.com/v1`, and EU regional projects use `https://eu.api.openai.com/v1`. Desktop settings are separate from a repository `.env` file. The key is encrypted with macOS Keychain protection outside the study. Opening a study never starts AI processing. **Pause** stops new dispatches while in-flight requests finish; **Resume** continues queued work. Unknown remote outcomes require a separate retry confirmation.
-5. Use **Add attachment** beside a record for a PDF, PNG/JPEG or typed text. You can drop one PDF or image directly into the attachment form. Identify it as participant material or a researcher note. The app assigns `R0001-A1`, `R0001-A2`, etc., preserves original content, and prepares readable PDF views for images/text. Check the impact preview before importing. Manual drafts are labeled separately from AI drafts; an empty manual draft does not count as an AI extraction and will not be skipped when you explicitly choose processing. Added attachments require renewed review; old AI drafts have not interpreted them. Choose **Edit manually** to retain compatible previous transcription and check new attachments yourself, or explicitly process the updated record. Adding an attachment does not call AI.
-6. Open **Review** and choose **Review now** to edit a complete participant/date group; **Preview** stays read-only. Compare scans with food items, edit time and meal label separately, and check each source page using the controls beside it. **Submit & next** saves and submits before opening the next eligible day. Failures remain on the current day. You can return to a submitted review and choose **Edit review**; approval is withdrawn when necessary, while frozen downloads stay unchanged.
-7. Use **Download → Download reviewed data** for approved human-reviewed results. The app explains which days still need approval. The default download is **food_records.csv**, with one row per consumed food. Use **Detailed archive** for XLSX, ingredient tables, JSON, source evidence and audit details. **Original AI drafts** is a secondary download and excludes manual drafts and later human edits.
-8. For collaborators, register an offline reviewer under **People & policy**, select days, and choose **Export review packages**. Set **days per package**; whole review units stay together. Task filenames include the reviewer name. The collaborator drops the task ZIP onto the app, reviews without an API key or account, submits each day, and downloads results to return. Reopening the same ZIP resumes local progress. If they revise a submission, they must submit again and download a new result ZIP; an earlier downloaded ZIP does not update itself. Import returned results under **Offline packages**. Returns do not automatically approve data.
-9. Use **Download → Study backup → Save backup** for a verified backup. Recent studies provide quick reopening. Closing during processing offers safe handling of in-flight work; reopening does not silently restart paid requests.
+5. Use **More → Add attachment** beside a record for a PDF, PNG/JPEG or typed text. You can drop one PDF or image directly into the attachment form. Identify it as participant material or a researcher note. The app assigns `R0001-A1`, `R0001-A2`, etc., preserves original content, and prepares readable PDF views for images/text. Check the impact preview before importing. Manual drafts are labeled separately from AI drafts; an empty manual draft does not count as an AI extraction and will not be skipped when you explicitly choose processing. Added attachments require renewed review; old AI drafts have not interpreted them. Choose **Edit manually** to retain compatible previous transcription and check new attachments yourself, or explicitly process the updated record. Adding an attachment does not call AI.
+6. In **Work list → Review days**, choose **Review** or **Continue review** to edit a complete participant/date group; **Preview** stays read-only. Compare scans with food items, edit time and meal label separately, and check each source page using the controls beside it. **Complete review & next** saves and submits before opening the next eligible day. Failures remain on the current day. You can return to a submitted review and choose **Edit review**; approval is withdrawn when necessary, while frozen downloads stay unchanged.
+7. Use **Export CSV** for approved human-reviewed results. The app explains which days still need approval. The default download is **food_records.csv**, with one row per consumed food. Use **Detailed archive** for XLSX, ingredient tables, JSON, source evidence and audit details. **Original AI drafts** is a secondary download and excludes manual drafts and later human edits.
+8. For collaborators, select review days and choose **Send for review**. Select or add a reviewer, then choose **Create review package**. Assignments are created automatically. You can select the next 100 unassigned days (or another quantity), with an option to include days assigned to other reviewers for independent review. The default is one ZIP for the selected records. Splitting into smaller ZIPs is optional; whole review units stay together. Task filenames include the reviewer name. The collaborator drops the task ZIP onto the app, reviews without an API key or account, submits each day, and downloads results to return. Reopening the same ZIP resumes local progress. If they revise a submission, they must submit again and download a new result ZIP; an earlier downloaded ZIP does not update itself. Import returned results under **Review packages**. Returns do not automatically approve data.
+9. Use **Export CSV → Study backup → Save backup** for a verified backup. Recent studies provide quick reopening. Closing during processing offers safe handling of in-flight work; reopening does not silently restart paid requests.
+
+The work list has **All records**, **Processing**, and **Review days** views. Processing opens its queue automatically; recent batches remain in the study after restart. Record selections expand to whole participant/date review days. Selecting specific review days preserves that exact date scope for sending and export, even if a PDF contains several days. **Clear selection** removes the current scope. Returning to the list preserves search and filters within the current app session.
 
 The owner computer can be off while collaborators review. Review and exports work offline; new AI extraction requires an internet connection and API billing. The application has no nutrient-database coding or automatic nutrient calculation.
 
@@ -310,10 +314,10 @@ In **People & policy**:
 
 ## 6. Export offline review packages
 
-1. Open **Day review queue** and select the units to assign.
-2. Click **Export review packages**, choose a reviewer, and set **Days per package**.
-3. Click **Create review packages**.
-4. Under **Offline packages**, use **Download review package** and send the ZIP to that reviewer through your study's chosen file-sharing channel.
+1. Open **Review days**, select the days, and click **Send for review**.
+2. Choose a reviewer, or add their name and email in the same dialog. To fill a new batch, use **Select unassigned days** (default 100; adjustable).
+3. Click **Create review package**. All selected days go into one ZIP by default; **Split into smaller ZIP files (optional)** lets you choose review days per ZIP. The app creates assignments and packages together. Existing eligible assignments or packages are reused.
+4. Download the ZIP files from **Ready to send** and send them through your study's chosen file-sharing channel. Saved downloads remain available under **Review packages**; no email is sent automatically.
 
 The package-size parameter counts complete review units, not food items or PDFs. A known participant/date unit includes all its records and attachments; undated units are kept separate. For example, 23 selected units with a package size of 10 produce packages of 10, 10, and 3. Filenames include the reviewer's name and a package identifier.
 
@@ -360,11 +364,11 @@ Use the same explicit workspace on later runs to resume that work.
 
 ## 8. Import reviews, approve, and export research data
 
-1. In **Offline packages → Import returned results**, select the returned result ZIP.
+1. In **Review packages → Import returned results**, select the returned result ZIP.
 2. Check its receipt. **Accepted for comparison** means the review was received, not that the data is approved.
-3. Open the corresponding unit and inspect submissions in **Review & decisions**. Compare independent reviews and record an adjudication when needed.
+3. Open the corresponding unit and inspect submissions in **Review & help**. Compare independent reviews and record an adjudication when needed.
 4. Once the required current reviews and checks are complete, use **Approve for research** (or **Approve selected** in the queue).
-5. Select approved units and click **Create release**. Choose **Download CSV** for the research table, or **Detailed archive** for full provenance. Both are available under **Research releases**.
+5. Select days and choose **Export CSV**. Check the included approved days and excluded days, then prepare and download the CSV. A fixed copy is saved; **Detailed archive** retains full provenance. Later edits do not alter earlier exports.
 
 Repeated import of the same result is detected. Outdated inputs/tasks require a new review. If a task has a different returned result, both versions are retained for comparison rather than silently overwriting the first.
 
@@ -510,3 +514,9 @@ Sync opens a preview of new, updated and unchanged records. Choose **Import chan
 Use stable `record_id` or `filename` metadata columns for reliable incremental matching. Previously confirmed identical metadata rows retain their associations, even after reordering. New or changed rows with no unambiguous file identifier require manual matching; row order is never used as evidence. Renamed files may need their record association checked. Identical PDF content is shown in the preview rather than silently merging different filenames.
 
 Deleting a file from the input folder does not delete it from the study. A source changed after preview must be synced again before confirmation. The study's `data/` folder can hold input PDFs and metadata, but `data/sources/`, internal app files and generated results are excluded. Do not edit app-managed source copies. Use **Settings → Change sync folder** if the input folder or metadata file moves. Limits per sync: 1,000 PDFs, 32 MB per PDF, 512 MB total PDFs and 4 MB metadata.
+
+### Send selected days to several reviewers
+
+Select the review days, then choose **Send for review**. Choose a reviewer and use **Add another reviewer** for each additional person. **Divide equally** distributes all selected days without overlap; **Set days per reviewer** lets you enter each person's count. The counts must cover the whole selection. Click **Create review packages** and send each downloaded ZIP to the person named on it. Each package retains that reviewer's identity when results are returned.
+
+By default, each reviewer receives one ZIP. Optional ZIP splitting changes file sizes, not reviewer assignments. This workflow distributes work; it does not assign every day to several independent reviewers. Existing packages are reused where possible. If a batch stops after some reviewers finish, completed download links remain available and saved packages can also be found under **Review packages**.

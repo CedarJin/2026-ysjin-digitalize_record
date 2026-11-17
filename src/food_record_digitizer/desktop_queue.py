@@ -54,6 +54,16 @@ class DesktopQueue:
             c.execute(
                 "CREATE TABLE IF NOT EXISTS jobs (record_id TEXT PRIMARY KEY, version INTEGER, state TEXT, config TEXT, started TEXT, finished TEXT, seconds REAL, error TEXT)"
             )
+            c.execute(
+                "CREATE TABLE IF NOT EXISTS processing_batches (id TEXT PRIMARY KEY, created_at TEXT, record_ids TEXT)"
+            )
+            if not c.execute("SELECT 1 FROM processing_batches LIMIT 1").fetchone():
+                old = c.execute("SELECT record_id FROM jobs ORDER BY record_id").fetchall()
+                if old:
+                    c.execute(
+                        "INSERT INTO processing_batches VALUES (?, ?, ?)",
+                        (uuid4().hex, now(), json.dumps([r[0] for r in old])),
+                    )
             if "run_id" not in {row[1] for row in c.execute("PRAGMA table_info(jobs)")}:
                 c.execute("ALTER TABLE jobs ADD COLUMN run_id TEXT")
             if "dispatch_id" not in {row[1] for row in c.execute("PRAGMA table_info(jobs)")}:
@@ -215,8 +225,14 @@ class DesktopQueue:
                     )
             with self.connection() as connection:
                 self.update_queued_endpoint(connection, config.get("base_url", DEFAULTS["base_url"]))
+            batch_id = uuid4().hex
+            with self.connection() as c:
+                c.execute(
+                    "INSERT INTO processing_batches VALUES (?, ?, ?)",
+                    (batch_id, now(), json.dumps(list(dict.fromkeys(ids)))),
+                )
             self.paused = False
-            return preview
+            return {**preview, "batch_id": batch_id}
 
     @staticmethod
     def update_queued_endpoint(connection, base_url):
@@ -318,6 +334,15 @@ class DesktopQueue:
                     (state, now(), time.monotonic() - started, error, rid),
                 )
                 self.active.discard(rid)
+
+    def batch_history(self):
+        with self.connection() as c:
+            return [
+                {"id": row[0], "created_at": row[1], "record_ids": json.loads(row[2])}
+                for row in c.execute(
+                    "SELECT id,created_at,record_ids FROM processing_batches ORDER BY created_at DESC LIMIT 20"
+                )
+            ]
 
     def status(self):
         with self.lock, self.connection() as c:

@@ -102,3 +102,19 @@ def test_failed_reprocess_keeps_approved_data_and_requires_unknown_retry(day_rev
         assert svc.detail(owner, rid)["approved_id"] == before
     finally:
         q.close()
+
+
+def test_processing_scope_survives_app_restart(day_review):
+    svc, *_ = day_review
+    q = DesktopQueue(svc.workspace, lambda config: FakeProvider())
+    preview = q.preview(["R001"])
+    batch = q.enqueue(["R001"], DEFAULTS, preview["versions"])
+    q.close()
+    reopened = DesktopQueue(svc.workspace, lambda config: FakeProvider())
+    try:
+        history = reopened.batch_history()
+        assert history[0]["id"] == batch["batch_id"]
+        assert history[0]["record_ids"] == ["R001"]
+        assert reopened.status()["active"] == 0
+    finally:
+        reopened.close()

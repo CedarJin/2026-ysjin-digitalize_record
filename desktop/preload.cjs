@@ -1,6 +1,7 @@
 'use strict';
 const {contextBridge, ipcRenderer, webUtils} = require('electron');
 contextBridge.exposeInMainWorld('desktop', Object.freeze({
+  hideRecent: file => ipcRenderer.invoke('hide-recent',file),
   recentStudies: () => ipcRenderer.invoke('recent-studies'),
   openRecent: index => ipcRenderer.invoke('open-recent', Number(index)),
   createStudy: name => ipcRenderer.invoke('create-study', typeof name==='string'?name:''),

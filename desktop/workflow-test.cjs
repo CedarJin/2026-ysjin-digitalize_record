@@ -18,9 +18,10 @@ async function submit(page){
  try{
   await choose(app,qa.study);await page.getByRole('button',{name:'Continue a study',exact:true}).click();await page.getByRole('heading',{name:'Desktop workflow test'}).waitFor({timeout:60000});
   await page.getByRole('button',{name:'Add records',exact:true}).click();
+  await page.getByText('Other import options',{exact:true}).click();
   await page.locator('#pdfs').setInputFiles([path.join(qa.folder,'New scan.pdf'),path.join(qa.folder,'Attachment.pdf')]);
   await page.locator('#metadata').setInputFiles(path.join(qa.folder,'metadata.csv'));
-  await page.getByRole('button',{name:'Continue to associations'}).click();
+  await page.getByRole('button',{name:'Check files'}).click();
   await page.locator('[data-source="0"]').fill('R003');await page.locator('[data-source="1"]').fill('R003-A1');
   await page.getByRole('button',{name:'Check import',exact:true}).click();
   await page.getByRole('button',{name:'Import records',exact:true}).click();
@@ -29,10 +30,10 @@ async function submit(page){
   await page.getByRole('checkbox',{name:'Select R001',exact:true}).check();await page.getByRole('button',{name:'Process selected'}).click();
   await page.getByText('1 existing AI drafts will be reused',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Reuse existing results'}).click();console.log('Existing draft reused without key / API');
-  await page.getByRole('link',{name:'Review',exact:true}).click();
-  await page.locator('tr').filter({hasText:'P001'}).getByRole('button',{name:'Review now',exact:true}).click();
-  await page.getByRole('button',{name:'Submit & next',exact:true}).waitFor();
-  await page.getByRole('textbox',{name:'Time normalized',exact:true}).fill('08:30');await page.locator('#save-now').click();
+  await page.locator('#queue-records').click();await page.getByRole('link',{name:'Review days',exact:true}).click();
+  await page.locator('tr').filter({hasText:'P001'}).getByRole('button',{name:/^(Review|Continue review)$/,exact:true}).click();
+  await page.getByRole('button',{name:'Complete review & next',exact:true}).waitFor();
+  await page.getByRole('textbox',{name:'Time for food 1',exact:true}).fill('08:30');await page.locator('#save-now').click();
   await page.locator('#scan').waitFor();await page.waitForFunction(()=>document.querySelector('#scan').naturalWidth>0);
   await page.screenshot({path:path.join(root,'work/desktop-review-qa.png')});
   await submit(page);await page.getByRole('button',{name:'Approve for research'}).click();
@@ -40,7 +41,7 @@ async function submit(page){
   if(await page.locator('dialog [data-accept]').count())await page.locator('dialog [data-accept]').click();
   await page.getByText('Approved',{exact:true}).first().waitFor();if(await page.locator('#modal[open]').count())await page.locator('#close-modal').click();
   await page.getByRole('button',{name:'Edit review',exact:true}).click();await page.locator('dialog [data-accept]').click();
-  await page.getByRole('button',{name:'Submit & next',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Complete review & next',exact:true}).waitFor();
   console.log('PDF rendering + owner submission + approval + reopen passed');
  }catch(e){await page.screenshot({path:path.join(root,'work/desktop-workflow-failure.png')});console.log(await page.locator('body').innerText());throw e;}finally{await app.close();}
  ({app,page}=await launch('reviewer-profile'));
@@ -48,7 +49,7 @@ async function submit(page){
   await choose(app,qa.packages[0].path);await page.getByRole('button',{name:'Review a package',exact:true}).click();
   await page.getByRole('heading',{name:'Review package',exact:true}).waitFor({timeout:60000});
   await page.getByRole('button',{name:'Open',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#scan').naturalWidth>0);
-  await submit(page);await page.getByRole('button',{name:'Edit review',exact:true}).click();await page.getByRole('button',{name:'Submit & next'}).waitFor();
+  await submit(page);await page.getByRole('button',{name:'Edit review',exact:true}).click();await page.getByRole('button',{name:'Complete review & next'}).waitFor();
   await page.locator('#submit').click();await page.locator('#last-review').click();await page.getByRole('button',{name:'Edit review'}).waitFor();
   await page.getByRole('button',{name:'← Queue',exact:true}).click();
   const dest=path.join(qa.folder,'alice-results.zip');
@@ -57,6 +58,25 @@ async function submit(page){
   await page.screenshot({path:path.join(root,'work/desktop-offline-qa.png')});
   console.log('Reviewer without key: open + submit + reopen + resubmit + export passed');
  }catch(e){await page.screenshot({path:path.join(root,'work/desktop-workflow-failure.png')});console.log(await page.locator('body').innerText());throw e;}finally{await app.close();}
+ ({app,page}=await launch('return-owner-profile'));
+ try{
+  await choose(app,qa.study);await page.getByRole('button',{name:'Continue a study',exact:true}).click();
+  await page.getByRole('link',{name:'Review days',exact:true}).click();
+  await page.locator('.study-tools>summary').click();await page.getByRole('button',{name:'Review packages',exact:true}).click();
+  await page.locator('#offline-return-form input[type=file]').setInputFiles(path.join(qa.folder,'alice-results.zip'));
+  await page.getByRole('button',{name:'Import results',exact:true}).click();await expect(page.locator('#offline-return-status')).toContainText('Accepted for comparison');
+  await page.getByRole('link',{name:'Work list',exact:true}).click();await page.getByRole('link',{name:'Review days',exact:true}).click();
+  await page.locator('tr').filter({hasText:'P002'}).getByRole('button',{name:'Preview',exact:true}).click();
+  await expect(page.locator('#approve-record')).toHaveCount(0);await page.getByRole('button',{name:'Review & help',exact:true}).click();
+  await page.locator('.message').filter({hasText:'Bob Example'}).locator('[data-return]').click();await page.locator('#ask-response').fill('Synthetic test: optional second assignment cancelled after checking independent baseline.');await page.locator('[data-accept]').click();await expect(page.getByRole('heading',{name:'Send for review',exact:true})).toBeVisible();await page.locator('#close-modal').click();
+  await page.locator('#approve-record').click();await expect(page.locator('#modal-body')).toContainText('Approved');await page.locator('#close-modal').click();
+  await page.locator('#back').click();await page.locator('#clear-day-selection').click();await page.locator('tr').filter({hasText:'P002'}).locator('[data-pick]').check();
+  await page.locator('#batch-release').click();await expect(page.locator('#modal-body')).toContainText('1 approved days included');await page.locator('#export-approved').click();
+  const csv=path.join(qa.folder,'reviewed-food.csv');await app.evaluate(({session},dest)=>session.defaultSession.on('will-download',(_e,item)=>item.setSavePath(dest)),csv);
+  await page.getByRole('link',{name:'Download CSV',exact:true}).click();await expect.poll(()=>fs.existsSync(csv)&&fs.statSync(csv).size>0).toBeTruthy();
+  const table=fs.readFileSync(csv,'utf8');if(!table.includes('P002')||table.includes('P001'))throw Error('CSV did not preserve exact approved selection');
+  console.log('Actual offline return → owner approval → scoped research CSV passed');
+ }catch(e){console.log(await page.locator('body').innerText());throw e;}finally{await app.close();}
  if(errors.length)throw Error(errors.join('\n'));
  console.log('Workflow GUI checks passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

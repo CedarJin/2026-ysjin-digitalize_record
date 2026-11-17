@@ -239,7 +239,7 @@ def create_app(
 
     @app.get("/static/{name}")
     def asset(name: str):
-        if name not in {"app.js", "review_flow.js", "style.css"}:
+        if name not in {"app.js", "review_flow.js", "style.css", "work_scope.js"}:
             raise ReviewError("Not found.", 404)
         return FileResponse(STATIC / name)
 
@@ -280,7 +280,7 @@ def create_app(
         return response
 
     @app.get("/api/records")
-    def queue(request: Request, batch_id: str | None = None):
+    def queue(request: Request, batch_id: str | None = None, overview: bool = False):
         who = user(request)
         rows = service.queue(who["id"])
         if batch_id:
@@ -293,6 +293,13 @@ def create_app(
                     for r in rows
                     if set(r.get("source_record_ids", [r["record_id"]])) & set(batch.manifest["groups"])
                 ]
+        if overview:
+            return {
+                "rows": rows,
+                "unresolved": len(getattr(service, "_unresolved_placements", []))
+                if who["role"] == "owner"
+                else 0,
+            }
         return rows
 
     @app.get("/api/records/{record_id}")
@@ -503,6 +510,21 @@ def create_app(
             raise ReviewError("Enter a reviewer name and email.")
         return {"id": OfflineManager(workspace).reviewer(who["id"], body["name"], body["email"])}
 
+    @app.post("/api/offline/select-next")
+    async def select_next_review_days(request: Request):
+        from .offline import OfflineManager
+
+        who = user(request, True)
+        body = await request.json()
+        if not isinstance(body.get("reviewer_id"), str):
+            raise ReviewError("Choose a reviewer first.")
+        scope = body.get("scope")
+        if scope is not None and (not isinstance(scope, list) or any(not isinstance(i, str) for i in scope)):
+            raise ReviewError("Select a valid review scope.")
+        return OfflineManager(workspace).select_next(
+            who["id"], body["reviewer_id"], body.get("count", 100), body.get("independent", False), scope
+        )
+
     @app.post("/api/offline/export")
     async def offline_export(request: Request):
         from .offline import OfflineManager
@@ -627,6 +649,8 @@ def create_app(
     async def assign(request: Request):
         who = user(request, True)
         body = await request.json()
+        if hasattr(service, "assign_many"):
+            return service.assign_many(who["id"], body["record_ids"], body["assignee_id"], body.get("due_at"))
         results = []
         for record_id in body["record_ids"]:
             try:

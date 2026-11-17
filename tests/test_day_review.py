@@ -361,3 +361,79 @@ def test_field_inheritance_survives_day_grouping_and_approval(day_review):
     task = svc.assign(owner, rid, reviewer)
     finish(svc, reviewer, task)
     assert svc.approve(owner, rid)
+
+
+def test_queue_overview_reconciles_once(day_review, monkeypatch):
+    svc, owner, *_ = day_review
+    import food_record_digitizer.day_review as module
+
+    calls = []
+    original = module.sync_day_units
+
+    def counted(service):
+        result = original(service)
+        calls.append(result)
+        return result
+
+    monkeypatch.setattr(module, "sync_day_units", counted)
+    browser = TestClient(create_app(svc.workspace))
+    browser.post("/api/login", json={"email": "owner@example.org", "password": "owner-password-123"})
+    response = browser.get("/api/records?overview=true")
+    assert response.status_code == 200
+    assert len(calls) == 1
+    assert response.json()["unresolved"] == len(calls[0])
+    assert response.json()["rows"] == browser.get("/api/records").json()
+
+
+def test_batch_assign_reconciles_once_and_keeps_errors(day_review, monkeypatch, tmp_path):
+    svc, owner, alice, *_ = day_review
+    add_source(svc.workspace, tmp_path, rid="R002", date="2026-01-02")
+    rows = svc.queue(owner)
+    import food_record_digitizer.day_review as module
+
+    original = module.sync_day_units
+    calls = []
+
+    def counted(service):
+        calls.append(1)
+        return original(service)
+
+    monkeypatch.setattr(module, "sync_day_units", counted)
+    ids = [r["record_id"] for r in rows]
+    result = svc.assign_many(owner, ids + [ids[0], "missing-day"], alice)
+    assert len(calls) == 1
+    assert len(result) == len(ids) + 1
+    assert all("task_id" in r for r in result[:-1])
+    assert "error" in result[-1]
+    again = svc.assign_many(owner, ids, alice)
+    assert all("error" in r for r in again)
+
+
+def test_unchanged_queue_reuses_projection_but_new_draft_rebuilds(day_review, monkeypatch):
+    svc, owner, *_ = day_review
+    before = svc.queue(owner)
+    import food_record_digitizer.day_grouping as grouping
+
+    original = grouping.project_day
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(args[0])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(grouping, "project_day", counted)
+    assert svc.queue(owner) == before
+    assert not calls
+    with svc.factory.begin() as session:
+        candidate = session.scalar(select(db.Candidate))
+        session.add(
+            db.Candidate(
+                record_pk=candidate.record_pk,
+                input_version=candidate.input_version,
+                content=copy.deepcopy(candidate.content),
+                provenance={"method": "new_test_draft"},
+            )
+        )
+    after = svc.queue(owner)
+    assert len(calls) == 1
+    assert after[0]["input_version"] > before[0]["input_version"]

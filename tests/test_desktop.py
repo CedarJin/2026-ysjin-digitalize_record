@@ -558,3 +558,24 @@ def test_preview_baseline_label_respects_origin(provenance, mode):
     from food_record_digitizer.review import baseline_display_mode
 
     assert baseline_display_mode(provenance) == mode
+
+
+def test_desktop_and_review_entrypoints_serve_every_script(ws):  # noqa: F811
+    """Catch missing allowlist entries before packaging the desktop app."""
+    import re
+
+    app = study_app(ws, "asset-test")
+    try:
+        client = TestClient(app, headers={"x-desktop-capability": "asset-test"})
+        for page in ("/", "/review"):
+            response = client.get(page)
+            assert response.status_code == 200
+            scripts = re.findall(r'<script[^>]+src="([^"]+)"', response.text)
+            assert scripts
+            for script in scripts:
+                asset = client.get(script)
+                assert asset.status_code == 200, script
+                assert "javascript" in asset.headers["content-type"], script
+        assert client.get("/api/me").json()["study_path"] == str(ws.root)
+    finally:
+        app.state.queue.close()

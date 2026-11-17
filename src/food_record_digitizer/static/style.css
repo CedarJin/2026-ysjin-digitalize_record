@@ -88,3 +88,10 @@ dialog{border-radius:5px;box-shadow:0 10px 40px #26313d20}dialog::backdrop{backg
 .recipe-panel{margin:18px 0;padding:16px;border:1px solid var(--line,#d9e0e5);border-radius:4px;background:#fafbfc}.recipe-panel>summary{font-weight:600;cursor:pointer}.ingredient{margin:14px 0;padding:14px;border-left:3px solid #bac9d2;background:white}.ingredient h4{margin:0 0 12px}.ingredient .toolbar{margin-top:12px}
 
 .item > summary {flex-wrap:wrap}.item > summary > .item-number {flex:0 0 auto}.item > summary > .item-summary-text {flex:1 1 170px;min-width:0}
+
+/* Compact review workspace: preserve the scan and the current food in view. */
+.review-header{padding:12px 20px;gap:12px}.review-header h1{font-size:22px;margin:4px 0}.review-header p{margin:4px 0;font-size:13px}.review-header .actions{gap:8px}.metadata-banner{padding:10px 14px}.metadata-banner dl{gap:6px 16px}.metadata-banner dt{font-size:11px}.metadata-banner dd{font-size:14px}.source-controls{padding:8px 12px}.editor-scroll{padding:14px}.item{margin:8px 0}.item>summary{padding:10px;gap:8px}.item-body{padding:12px}.compact-food-fields{flex:1 1 380px;display:grid;grid-template-columns:minmax(120px,2fr) repeat(4,minmax(55px,1fr));gap:6px}.compact-food-fields label{font-size:11px;margin:0;min-width:0}.compact-food-fields input{width:100%;min-width:0;padding:7px;font-size:14px}.compact-food-fields small{grid-column:1/-1;font-size:12px;color:var(--muted)}.item>.item-body .field{margin-bottom:10px}.issue button{margin:4px}.issue small{display:block}.review-header .save-status{font-size:12px}
+
+.work-views{display:flex;gap:24px;margin:0 0 20px;border-bottom:1px solid #d8dee5}.work-views a{padding:10px 0;color:#526171;text-decoration:none}.work-views a[aria-current="page"]{font-weight:600;color:#254b68;border-bottom:3px solid #254b68}
+
+#toast button{margin-left:12px;background:transparent;color:inherit;border-color:currentColor;padding:4px 8px}
