@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from copy import deepcopy
 from datetime import date as Date
 from typing import Literal
 
@@ -97,6 +98,45 @@ class FoodFields(Model):
     quantity_max: float | None = Field(default=None, ge=0)
     evidence: list[Evidence] = Field(min_length=1)
     notes: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def inherit_row_evidence(cls, data):
+        """Recover omitted field evidence only when its raw text occurs in this row.
+
+        Do not borrow evidence from a parent recipe, another food, or a whole page.
+        The original provider response remains unchanged in the extraction archive.
+        """
+        if not isinstance(data, dict):
+            return data
+        result = dict(data)
+
+        def text(value):
+            return " ".join(value.casefold().split()) if isinstance(value, str) else ""
+
+        for name, field in cls.model_fields.items():
+            value = data.get(name)
+            if field.annotation is not Value or not isinstance(value, dict):
+                continue
+            if (
+                value.get("normalized") is None
+                or value.get("evidence")
+                or value.get("inherited_from")
+                or value.get("metadata_reference")
+            ):
+                continue
+            raw = text(value.get("raw"))
+            if not raw:
+                continue
+            matches = [
+                e
+                for e in data.get("evidence", [])
+                if isinstance(e, dict)
+                and re.search(r"(?<!\w)" + re.escape(raw) + r"(?!\w)", text(e.get("transcription_raw")))
+            ]
+            if matches:
+                result[name] = {**value, "evidence": deepcopy(matches)}
+        return result
 
     @model_validator(mode="after")
     def quantity_range(self):
