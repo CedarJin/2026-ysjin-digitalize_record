@@ -62,9 +62,9 @@ The desktop app wraps this same Python package. It includes Python and a PDF ren
 
 ### Install the app
 
-This guide describes version **0.10.2**, an internal testing build for collaborators.
+This guide describes version **0.10.3**, an internal testing build for collaborators.
 
-Download the installer from the [v0.10.2 testing pre-release](https://github.com/CedarJin/2026-ysjin-digitalize_record/releases/tag/v0.10.2): choose **Food-Record-0.10.2-macOS-arm64.zip**, not the automatically generated Source code archive. A SHA-256 checksum file is provided alongside it. This is a testing preview; read the release notes for compatibility and pending validation.
+Download the installer from the [v0.10.3 testing pre-release](https://github.com/CedarJin/2026-ysjin-digitalize_record/releases/tag/v0.10.3): choose **Food-Record-0.10.3-macOS-arm64.zip**, not the automatically generated Source code archive. A SHA-256 checksum file is provided alongside it. This is a testing preview; read the release notes for compatibility and pending validation.
 
 1. Unzip the **installer ZIP**.
 2. Drag **Food Record.app** into **Applications** and open it.
@@ -72,7 +72,7 @@ Download the installer from the [v0.10.2 testing pre-release](https://github.com
 
 ### Start with your own data
 
-The workflow below describes **version 0.10.2**, including shared record selections, processing progress, simplified review, and multi-reviewer package allocation.
+The workflow below describes **version 0.10.3**, including shared record selections, processing progress, simplified review, and multi-reviewer package allocation.
 
 **A new researcher does not need an existing workspace, database or specially arranged input folder.** Choose **Start a new study** and select a new study folder such as `Documents/My Nutrition Study`. The app creates its internal files. Then drop the folder containing your scans and metadata onto the app, or use **Choose folder** / **Choose files**. Your original files stay in place.
 
@@ -520,3 +520,9 @@ Deleting a file from the input folder does not delete it from the study. A sourc
 Select the review days, then choose **Send for review**. Choose a reviewer and use **Add another reviewer** for each additional person. **Divide equally** distributes all selected days without overlap; **Set days per reviewer** lets you enter each person's count. The counts must cover the whole selection. Click **Create review packages** and send each downloaded ZIP to the person named on it. Each package retains that reviewer's identity when results are returned.
 
 By default, each reviewer receives one ZIP. Optional ZIP splitting changes file sizes, not reviewer assignments. This workflow distributes work; it does not assign every day to several independent reviewers. Existing packages are reused where possible. If a batch stops after some reviewers finish, completed download links remain available and saved packages can also be found under **Review packages**.
+
+### Delete an incorrect review package (0.10.3)
+
+In **Review days → Study tools → Review packages**, choose **Delete package**. The package disappears from the list, its download is blocked, and its assignments are released so you can create a replacement. Results returned from that deleted package are rejected, even if the ZIP was already sent. Previously downloaded ZIPs cannot be remotely removed.
+
+If review results already exist, a second confirmation explains that those reviews will no longer count and affected current approvals will be cleared. Saved review history and previously exported research releases are retained.

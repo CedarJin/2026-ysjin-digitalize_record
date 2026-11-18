@@ -213,6 +213,8 @@ class OfflineManager:
                     )
                     .order_by(db.OfflinePackage.created_at.desc())
                 ):
+                    if package.manifest.get("deleted_at"):
+                        continue
                     issued = package.manifest["units"]
                     packaged_ids = {u["id"] for u in issued}
                     if not remaining.intersection(packaged_ids):
@@ -338,6 +340,39 @@ class OfflineManager:
                         settings.units_per_package = units_per_package
                 return results
 
+    def delete_package(self, actor_id, package_id, confirm_reviewed=False):
+        """Revoke a package and its assignments atomically; retain immutable review history."""
+        svc = self.service
+        with svc._sync_lock, self.workspace.factory.begin() as s:
+            actor = svc.actor(s, actor_id, True)
+            package = s.get(db.OfflinePackage, package_id)
+            if not package or package.project_id != self.workspace.project_id:
+                raise ReviewError("Package not found.", 404)
+            if package.manifest.get("deleted_at"):
+                return {"status": "deleted"}
+            tasks = [s.get(db.DayReviewTask, u["task_id"]) for u in package.manifest["units"]]
+            task_ids = [t.id for t in tasks if t]
+            reviewed = bool(s.scalar(select(db.DayReviewSubmission.id).where(
+                db.DayReviewSubmission.task_id.in_(task_ids)
+            ).limit(1)) or s.scalar(select(db.OfflineReceipt.id).where(
+                db.OfflineReceipt.package_id == package.id
+            ).limit(1)))
+            if reviewed and not confirm_reviewed:
+                raise ReviewError("This package has review results. Confirm deletion to stop counting these reviews and remove any affected current approval. Saved history and previous exports are retained.", 409)
+            for task in tasks:
+                if not task or task.status in {"cancelled", "returned", "stale"}:
+                    continue
+                unit = s.get(db.DayReviewUnit, task.record_pk)
+                if unit and svc.fresh(s, task, unit):
+                    unit.approved_id = None
+                    if unit.state not in {"excluded", "retired"}:
+                        unit.state = "pending_review"
+                task.status = "returned" if task.status == "submitted" else "cancelled"
+                svc.audit(s, actor, "task_returned", task.id, {"reason": "Review package deleted", "package_id": package.id})
+            package.manifest = {**package.manifest, "deleted_at": db.now(), "deleted_by": actor.id}
+            svc.audit(s, actor, "offline_package_deleted", package.id, {"had_results": reviewed})
+            return {"status": "deleted"}
+
     def import_result(self, actor_id, data):
         svc = self.service
         with self.workspace.factory() as s:
@@ -359,6 +394,8 @@ class OfflineManager:
                 package = s.get(db.OfflinePackage, result.get("package_id", ""))
                 if not package or package.project_id != self.workspace.project_id:
                     raise ReviewError("This package was not issued by this project.")
+                if package.manifest.get("deleted_at"):
+                    raise ReviewError("This review package was deleted. Ask the study owner for a new package.", 410)
                 receipt = s.scalar(
                     select(db.OfflineReceipt).where(
                         db.OfflineReceipt.package_id == package.id, db.OfflineReceipt.result_sha256 == digest

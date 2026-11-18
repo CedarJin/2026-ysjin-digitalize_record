@@ -553,6 +553,8 @@ def create_app(
                 .where(OfflinePackage.project_id == service.project_id)
                 .order_by(OfflinePackage.created_at.desc())
             ):
+                if package.manifest.get("deleted_at"):
+                    continue
                 reviewer = s.get(ReviewUser, package.reviewer_id)
                 receipts = list(
                     s.scalars(
@@ -575,6 +577,17 @@ def create_app(
                 )
             return rows
 
+    @app.post("/api/offline/packages/{package_id}/delete")
+    async def offline_delete(request: Request, package_id: str):
+        from .offline import OfflineManager
+
+        who = user(request, True)
+        body = await request.json()
+        confirmed = body.get("confirm_reviewed", False)
+        if type(confirmed) is not bool:
+            raise ReviewError("Invalid confirmation.")
+        return OfflineManager(workspace).delete_package(who["id"], package_id, confirmed)
+
     @app.get("/api/offline/packages/{package_id}/download")
     def offline_download(request: Request, package_id: str):
         from .db import OfflinePackage
@@ -585,6 +598,8 @@ def create_app(
             package = s.get(OfflinePackage, package_id)
             if not package or package.project_id != service.project_id:
                 raise ReviewError("Package not found.", 404)
+            if package.manifest.get("deleted_at"):
+                raise ReviewError("This review package was deleted and cannot be downloaded.", 410)
             path = workspace.path / "offline" / "packages" / (package.archive_sha256 + ".zip")
             if not path.exists() or sha256(path.read_bytes()) != package.archive_sha256:
                 raise ReviewError("Stored package is missing or damaged.")

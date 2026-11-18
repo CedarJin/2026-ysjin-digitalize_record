@@ -380,3 +380,52 @@ def test_send_mixed_existing_and_new_packages_and_partial_selection(day_review, 
         assert session.scalar(select(func.count()).select_from(db.DayReviewTask)) == 3
     for package in mixed:
         assert all(t["status"] == "accepted" for t in manager.import_result(owner, pack(result_for(package), []))["tasks"])
+
+
+def test_delete_package_hides_blocks_download_and_releases_days(day_review):
+    from fastapi.testclient import TestClient
+
+    from food_record_digitizer.review_web import create_app
+
+    svc, owner, a, b, h = day_review
+    manager = OfflineManager(svc.workspace)
+    rid = svc.queue(owner)[0]['record_id']
+    old = manager.export(owner, a, [rid])[0]
+    returned = pack(result_for(old), [])
+    client = TestClient(create_app(svc.workspace))
+    client.post('/api/login', json={'email':'owner@example.org','password':'owner-password-123'})
+    headers = {'x-csrf-token':client.get('/api/me').json()['csrf']}
+    url = '/api/offline/packages/'+old['package_id']
+    assert client.post(url+'/delete', json={}).status_code == 403
+    with pytest.raises(ReviewError):
+        manager.delete_package(a, old['package_id'])
+    assert client.post(url+'/delete', json={}, headers=headers).status_code == 200
+    assert client.get('/api/offline/packages').json() == []
+    assert client.get(url+'/download').status_code == 410
+    with pytest.raises(ReviewError, match='deleted'):
+        manager.import_result(owner, returned)
+    assert manager.delete_package(owner, old['package_id']) == {'status':'deleted'}
+    new = manager.export(owner, a, [rid])[0]
+    assert new['package_id'] != old['package_id']
+    assert manager.import_result(owner, pack(result_for(new), []))['tasks'][0]['status'] == 'accepted'
+
+
+def test_delete_reviewed_package_requires_confirmation_and_invalidates_approval(day_review):
+    svc, owner, a, b, h = day_review
+    manager = OfflineManager(svc.workspace)
+    rid = svc.queue(owner)[0]['record_id']
+    old = manager.export(owner, a, [rid])[0]
+    returned = pack(result_for(old), [])
+    manager.import_result(owner, returned)
+    svc.approve(owner, rid)
+    with pytest.raises(ReviewError, match='review results'):
+        manager.delete_package(owner, old['package_id'])
+    assert svc.detail(owner, rid)['approved_id'] is not None
+    manager.delete_package(owner, old['package_id'], True)
+    assert svc.detail(owner, rid)['approved_id'] is None
+    with pytest.raises(ReviewError, match='deleted'):
+        manager.import_result(owner, returned)  # Revocation precedes duplicate-return handling.
+    with svc.factory() as s:
+        assert s.scalar(select(func.count()).select_from(db.DayReviewSubmission)) == 1
+        assert s.scalar(select(db.DayReviewTask)).status == 'returned'
+    assert manager.export(owner, a, [rid])[0]['package_id'] != old['package_id']
