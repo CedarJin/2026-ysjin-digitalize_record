@@ -62,9 +62,9 @@ The desktop app wraps this same Python package. It includes Python and a PDF ren
 
 ### Install the app
 
-This guide describes version **0.10.3**, an internal testing build for collaborators.
+This guide describes version **0.10.4**, an internal testing build for collaborators.
 
-Download the installer from the [v0.10.3 testing pre-release](https://github.com/CedarJin/2026-ysjin-digitalize_record/releases/tag/v0.10.3): choose **Food-Record-0.10.3-macOS-arm64.zip**, not the automatically generated Source code archive. A SHA-256 checksum file is provided alongside it. This is a testing preview; read the release notes for compatibility and pending validation.
+Download the installer from the [v0.10.4 testing pre-release](https://github.com/CedarJin/2026-ysjin-digitalize_record/releases/tag/v0.10.4): choose **Food-Record-0.10.4-macOS-arm64.zip**, not the automatically generated Source code archive. A SHA-256 checksum file is provided alongside it. This is a testing preview; read the release notes for compatibility and pending validation.
 
 1. Unzip the **installer ZIP**.
 2. Drag **Food Record.app** into **Applications** and open it.
@@ -526,3 +526,7 @@ By default, each reviewer receives one ZIP. Optional ZIP splitting changes file 
 In **Review days → Study tools → Review packages**, choose **Delete package**. The package disappears from the list, its download is blocked, and its assignments are released so you can create a replacement. Results returned from that deleted package are rejected, even if the ZIP was already sent. Previously downloaded ZIPs cannot be remotely removed.
 
 If review results already exist, a second confirmation explains that those reviews will no longer count and affected current approvals will be cleared. Saved review history and previously exported research releases are retained.
+
+### Compact page confirmation (0.10.4)
+
+After confirming a source page, its confirmation panel collapses to a small checked-status row so more of the scan stays visible. Select **Edit** on that row to change page notes or uncheck the page in Page coverage. Unchecked pages retain their confirmation controls. This applies to both study-owner and offline review. Available in version 0.10.4.

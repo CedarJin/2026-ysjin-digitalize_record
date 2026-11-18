@@ -7,7 +7,14 @@ const executablePath=process.env.FOOD_RECORD_TEST_APP||path.join(root,'dist/maco
 async function launch(profile){const app=await electron.launch({executablePath,args:['--user-data-dir='+path.join(qa.folder,profile)],env:{...process.env,PATH:'/usr/bin:/bin'}});const page=await app.firstWindow();page.setDefaultTimeout(15000);await page.getByRole('button',{name:'Continue a study',exact:true}).waitFor({timeout:60000});return {app,page};}
 async function choose(app,target){await app.evaluate(({dialog},target)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[target]});},target);}
 async function submit(page){
- await page.locator('#check-current').click();await page.locator('#save-now').click();await page.locator('#submit').click();
+ const expandedHeight=await page.locator('#page-check').evaluate(el=>el.getBoundingClientRect().height);
+ await page.locator('#check-current').click();
+ await expect(page.locator('#page-check')).toHaveClass(/is-checked/);
+ await expect(page.locator('#check-current')).toHaveCount(0);
+ expect(await page.locator('#page-check').evaluate(el=>el.getBoundingClientRect().height)).toBeLessThan(expandedHeight);
+ await page.locator('#page-details').click();await page.locator('[data-bool="pages.0.reviewed"]').uncheck();
+ await expect(page.locator('#check-current')).toBeVisible();await page.locator('#check-current').click();
+ await page.locator('#save-now').click();await page.locator('#submit').click();
  await expect.poll(async()=>await page.locator('#last-submitted').count()||await page.locator('#last-review').count()).toBeTruthy();
  if(await page.locator('#last-submitted').count())await page.locator('#last-submitted').click();else await page.locator('#last-review').click();
  await page.getByRole('button',{name:'Edit review',exact:true}).waitFor();

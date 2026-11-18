@@ -95,3 +95,8 @@ dialog{border-radius:5px;box-shadow:0 10px 40px #26313d20}dialog::backdrop{backg
 .work-views{display:flex;gap:24px;margin:0 0 20px;border-bottom:1px solid #d8dee5}.work-views a{padding:10px 0;color:#526171;text-decoration:none}.work-views a[aria-current="page"]{font-weight:600;color:#254b68;border-bottom:3px solid #254b68}
 
 #toast button{margin-left:12px;background:transparent;color:inherit;border-color:currentColor;padding:4px 8px}
+
+/* Completed source checks leave the scan visible; editing remains available. */
+.page-check.is-checked{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 12px;min-height:30px}
+.page-check-summary{font-size:12px;color:var(--muted)}
+.page-check.is-checked #page-details{padding:3px 8px;margin:0;font-size:12px}
